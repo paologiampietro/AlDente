@@ -1,0 +1,2665 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#7c2d2d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Il Mio Ricettario</title>
+<link rel="manifest" id="manifest-link">
+
+<!-- Firebase SDK (compat — funziona in WebView Android e browser) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+<script>
+  var _firebaseConfig = {
+    apiKey: "AIzaSyCvirGI-HQPMkv1YWNJsmgI7_XyFhREOvg",
+    authDomain: "aldente-85774.firebaseapp.com",
+    databaseURL: "https://aldente-85774-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "aldente-85774",
+    storageBucket: "aldente-85774.firebasestorage.app",
+    messagingSenderId: "840163575181",
+    appId: "1:840163575181:web:f09f98ea115fdecf4529c4"
+  };
+
+  var _fbApp, _fbDb;
+  var _firebaseAbilitato = false;
+
+  try {
+    _fbApp = firebase.initializeApp(_firebaseConfig);
+    _fbDb   = firebase.database();
+    _firebaseAbilitato = true;
+    console.log('✅ Firebase inizializzato');
+  } catch(e) {
+    console.warn('Firebase non inizializzato:', e);
+  }
+
+  // Adatta l'API compat all'interfaccia usata dal resto dell'app
+  window._firebase = {
+    db:       _fbDb,
+    ref:      function(db, path) { return _fbDb.ref(path); },
+    set:      function(refObj, val) { return refObj.set(val); },
+    onValue:  function(refObj, cb) { refObj.on('value', function(snap){ cb(snap); }); },
+    push:     function(refObj, val) { return refObj.push(val); },
+    remove:   function(refObj) { return refObj.remove(); },
+    update:   function(refObj, val) { return refObj.update(val); },
+    abilitato: function() { return _firebaseAbilitato; }
+  };
+
+  // FCM — notifiche push
+  window.addEventListener('load', function() {
+    try {
+      if (!('serviceWorker' in navigator) || !_firebaseAbilitato) return;
+      var messaging = firebase.messaging();
+      navigator.serviceWorker.ready.then(function(swReg) {
+        messaging.getToken({
+          vapidKey: 'BPQEZuYFEFPGTSRzvZ_HqsMujMs67DrXMIGmpQIc2g0PjkrXww6xbBUqKyUfW9A17y7yRhA6QskfsfwnFEm-JAk',
+          serviceWorkerRegistration: swReg
+        }).then(function(token) {
+          if (token) { console.log('✅ FCM Token:', token); window._fcmToken = token; }
+        }).catch(function(e){ console.warn('FCM token error:', e); });
+
+        messaging.onMessage(function(payload) {
+          var notif = payload.notification || {};
+          if (notif.title) {
+            swReg.showNotification(notif.title, {
+              body: notif.body || '',
+              icon: './icon-192.png',
+              badge: './icon-192.png',
+              tag: 'fcm-push',
+              vibrate: [200, 100, 200]
+            });
+          }
+        });
+      });
+    } catch(e) { console.warn('FCM non disponibile:', e); }
+  });
+</script>
+
+<style>
+  :root {
+    --rosso: #7c2d2d;
+    --rosso2: #a83232;
+    --oro: #c8922a;
+    --panna: #fdf8f0;
+    --panna2: #f5ede0;
+    --testo: #2a1a0e;
+    --testo2: #6b4c30;
+    --bordo: #e0cdb8;
+    --verde: #2d6a3f;
+    --verde2: #3a8a50;
+    --viola: #5b3785;
+    --azzurro: #1e5c8a;
+    --grigio: #6b7280;
+    --bianco: #ffffff;
+    --ombra: rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: 'Georgia', serif;
+    background: var(--panna);
+    color: var(--testo);
+    max-width: 480px;
+    margin: 0 auto;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* INSTALL BANNER */
+  #install-banner {
+    display: none;
+    position: fixed; top: 0; left: 0; right: 0;
+    background: var(--rosso); color: white;
+    padding: 10px 16px;
+    font-size: 13px; font-family: Georgia, serif;
+    z-index: 9999;
+    align-items: center; gap: 10px;
+    max-width: 480px; margin: 0 auto;
+  }
+  #install-banner span { flex: 1; }
+  #install-banner button {
+    background: white; color: var(--rosso);
+    border: none; border-radius: 20px;
+    padding: 5px 14px; font-size: 12px;
+    font-weight: bold; cursor: pointer;
+    font-family: Georgia, serif;
+  }
+  #install-banner .close-banner {
+    background: transparent; color: white;
+    padding: 4px 8px; font-size: 16px;
+    border: none; cursor: pointer;
+  }
+
+  /* HEADER */
+  .header {
+    background: linear-gradient(160deg, var(--rosso) 0%, var(--rosso2) 100%);
+    padding: 16px 16px 0;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .header-title { color: white; font-size: 20px; letter-spacing: 0.3px; }
+  .header-subtitle { color: rgba(255,255,255,0.7); font-size: 12px; margin-top: 2px; font-family: sans-serif; }
+  .header-btns { display: flex; gap: 8px; }
+  .btn-icon {
+    background: rgba(255,255,255,0.2); border: none;
+    color: white; width: 36px; height: 36px;
+    border-radius: 50%; font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s;
+  }
+  .btn-icon:active { background: rgba(255,255,255,0.35); }
+
+  /* CERCA */
+  .cerca-wrap { padding: 0 0 10px; }
+  .cerca-input {
+    width: 100%; padding: 10px 14px;
+    border-radius: 22px; border: none;
+    font-size: 14px; font-family: Georgia, serif;
+    background: rgba(255,255,255,0.92);
+    outline: none;
+  }
+
+  /* BOTTOM NAV */
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 100%; max-width: 480px;
+    background: white; border-top: 1px solid var(--bordo);
+    display: flex; z-index: 90;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    height: 62px;
+  }
+  .nav-btn {
+    flex: 1; padding: 8px 4px 6px;
+    border: none; background: none;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    cursor: pointer; color: var(--testo2);
+    font-size: 11px; font-family: sans-serif;
+    transition: color 0.15s;
+  }
+  .nav-btn .nav-icon { font-size: 22px; }
+  .nav-btn.active { color: var(--rosso); }
+  .nav-badge {
+    position: absolute; top: 3px; right: calc(50% - 22px);
+    background: var(--rosso); color: white;
+    border-radius: 10px; font-size: 10px; font-family: sans-serif;
+    padding: 1px 5px; font-weight: bold; min-width: 16px; text-align: center;
+    display: none; z-index: 2;
+  }
+  .nav-btn-wrap { position: relative; flex: 1; display: flex; justify-content: center; }
+  /* Slot centrale vuoto per il FAB */
+  .nav-fab-spacer { flex: 0 0 72px; }
+
+  /* CATEGORIE */
+  .cat-scroll {
+    display: flex; gap: 8px;
+    overflow-x: auto; padding: 8px 16px 10px;
+    background: white;
+    border-bottom: 1px solid var(--bordo);
+    scrollbar-width: none;
+  }
+  .cat-scroll::-webkit-scrollbar { display: none; }
+  .cat-chip {
+    flex-shrink: 0; padding: 5px 14px;
+    border-radius: 20px; border: 1.5px solid var(--bordo);
+    background: white; color: var(--testo2);
+    font-size: 13px; cursor: pointer;
+    font-family: Georgia, serif;
+    transition: all 0.15s;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .cat-chip.active { color: white; border-color: transparent; }
+
+  /* LISTA */
+  .lista { padding: 10px 14px 90px; }
+  .nessuna { text-align: center; padding: 60px 20px; color: var(--testo2); }
+  .nessuna .icon { font-size: 40px; margin-bottom: 10px; }
+  .ricetta-card {
+    display: flex; align-items: center;
+    background: white; border-radius: 14px;
+    padding: 12px 14px; margin-bottom: 8px;
+    cursor: pointer; border: 1px solid var(--bordo);
+    transition: transform 0.12s, box-shadow 0.12s;
+    text-align: left; width: 100%;
+    font-family: Georgia, serif;
+  }
+  .ricetta-card:active { transform: scale(0.98); box-shadow: 0 1px 4px var(--ombra); }
+  .card-emoji {
+    width: 44px; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; flex-shrink: 0; margin-right: 12px;
+  }
+  .card-info { flex: 1; min-width: 0; }
+  .card-nome { font-weight: bold; font-size: 14px; color: var(--testo); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-meta { font-size: 11px; color: var(--testo2); font-family: sans-serif; }
+  .card-arrow { font-size: 18px; margin-left: 8px; }
+
+  /* FAB */
+  .fab {
+    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+    background: var(--rosso); color: white;
+    width: 56px; height: 56px; border-radius: 50%;
+    font-size: 28px; border: none; cursor: pointer;
+    box-shadow: 0 4px 16px rgba(124,45,45,0.4);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 95; transition: transform 0.15s;
+  }
+  .fab:active { transform: translateX(-50%) scale(0.92); }
+  .fab.verde {
+    background: var(--verde);
+    box-shadow: 0 4px 16px rgba(45,106,63,0.4);
+  }
+
+  /* DETTAGLIO */
+  #view-dettaglio { display: none; }
+  .det-header {
+    padding: 52px 18px 20px;
+    position: relative;
+  }
+  .det-back {
+    position: absolute; top: 12px; left: 14px;
+    background: rgba(255,255,255,0.25); border: none;
+    color: white; border-radius: 20px;
+    padding: 6px 14px; font-size: 13px; cursor: pointer;
+    font-family: Georgia, serif;
+  }
+  .det-edit {
+    position: absolute; top: 12px; right: 14px;
+    background: rgba(255,255,255,0.25); border: none;
+    color: white; border-radius: 20px;
+    padding: 6px 14px; font-size: 13px; cursor: pointer;
+    font-family: Georgia, serif;
+  }
+  .det-cat-label { font-size: 12px; color: rgba(255,255,255,0.8); margin-bottom: 4px; font-family: sans-serif; }
+  .det-nome { color: white; font-size: 22px; line-height: 1.3; }
+  .det-porzioni { color: rgba(255,255,255,0.8); font-size: 13px; margin-top: 6px; font-family: sans-serif; }
+  .det-body { padding: 16px 16px 90px; }
+  .sezione-card {
+    background: white; border-radius: 14px;
+    padding: 14px 16px; margin-bottom: 14px;
+    border: 1px solid var(--bordo);
+  }
+  .sezione-titolo { font-size: 13px; color: var(--testo2); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; font-family: sans-serif; font-weight: bold; }
+  .ing-row {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 6px 0; border-bottom: 1px solid #f5ede0;
+  }
+  .ing-row:last-child { border-bottom: none; }
+  .ing-dot { color: var(--rosso); font-size: 18px; line-height: 1.4; flex-shrink: 0; }
+  .ing-testo { font-size: 14px; color: var(--testo); line-height: 1.5; }
+  .proc-testo { font-size: 14px; color: var(--testo); line-height: 1.8; }
+  .nota-box {
+    border-left: 4px solid var(--oro);
+    border-radius: 0 10px 10px 0;
+    background: rgba(200,146,42,0.08);
+    padding: 10px 14px;
+  }
+  .nota-testo { font-size: 13px; color: var(--testo2); line-height: 1.6; font-style: italic; }
+
+  /* MODAL BASE */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5); z-index: 200;
+    align-items: flex-end; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: white; border-radius: 20px 20px 0 0;
+    padding: 20px 18px 36px;
+    width: 100%; max-width: 480px;
+    max-height: 88vh; overflow-y: auto;
+  }
+  .modal-title {
+    font-size: 18px; font-weight: bold;
+    margin-bottom: 16px; color: var(--testo);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .modal-close {
+    background: none; border: none;
+    font-size: 22px; cursor: pointer; color: var(--testo2);
+    line-height: 1;
+  }
+
+  /* FORM */
+  .form-group { margin-bottom: 14px; }
+  .form-label { font-size: 12px; color: var(--testo2); margin-bottom: 5px; display: block; font-family: sans-serif; text-transform: uppercase; letter-spacing: 0.5px; }
+  .form-input, .form-textarea, .form-select {
+    width: 100%; padding: 10px 12px;
+    border: 1.5px solid var(--bordo); border-radius: 10px;
+    font-size: 14px; font-family: Georgia, serif;
+    background: var(--panna); color: var(--testo);
+    outline: none; transition: border-color 0.2s;
+  }
+  .form-input:focus, .form-textarea:focus, .form-select:focus { border-color: var(--rosso); }
+  .form-textarea { resize: vertical; min-height: 90px; }
+  .btn-primario {
+    width: 100%; padding: 13px;
+    background: var(--rosso); color: white;
+    border: none; border-radius: 12px;
+    font-size: 16px; font-family: Georgia, serif;
+    cursor: pointer; margin-top: 6px;
+    transition: opacity 0.2s;
+  }
+  .btn-primario:active { opacity: 0.85; }
+  .btn-primario.verde-btn { background: var(--verde); }
+  .btn-secondario {
+    width: 100%; padding: 12px;
+    background: white; color: var(--testo2);
+    border: 1.5px solid var(--bordo); border-radius: 12px;
+    font-size: 14px; font-family: Georgia, serif;
+    cursor: pointer; margin-top: 6px;
+    transition: background 0.15s;
+  }
+  .btn-secondario:active { background: var(--panna2); }
+  .btn-pericolo {
+    width: 100%; padding: 12px;
+    background: white; color: #c0392b;
+    border: 1.5px solid #f5c6c6; border-radius: 12px;
+    font-size: 14px; font-family: Georgia, serif;
+    cursor: pointer; margin-top: 6px;
+  }
+
+  /* INGREDIENTI DINAMICI */
+  .ing-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+  .ing-item { display: flex; gap: 6px; align-items: center; }
+  .ing-item input { flex: 1; }
+  .ing-remove {
+    background: none; border: none; color: #c0392b;
+    font-size: 20px; cursor: pointer; padding: 0 4px; line-height: 1;
+  }
+  .ing-add {
+    background: none; border: 1.5px dashed var(--bordo);
+    color: var(--testo2); border-radius: 8px;
+    padding: 8px; font-size: 13px; cursor: pointer;
+    font-family: Georgia, serif; width: 100%;
+    transition: background 0.15s;
+  }
+  .ing-add:active { background: var(--panna2); }
+
+  /* CATEGORIE GESTIONE */
+  .cat-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 1px solid var(--bordo);
+  }
+  .cat-item:last-child { border-bottom: none; }
+  .cat-item-nome { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .cat-del {
+    background: none; border: none; color: #c0392b;
+    font-size: 18px; cursor: pointer; padding: 4px 8px;
+  }
+  .cat-count { font-size: 12px; color: var(--testo2); font-family: sans-serif; }
+
+  /* OCR */
+  .ocr-area { border: 2px dashed var(--bordo); border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 14px; cursor: pointer; transition: border-color 0.2s, background 0.2s; }
+  .ocr-area:hover, .ocr-area.drag { border-color: var(--rosso); background: rgba(124,45,45,0.04); }
+  .ocr-area input { display: none; }
+  .ocr-icon { font-size: 36px; margin-bottom: 8px; }
+  .ocr-label { font-size: 14px; color: var(--testo2); }
+  .ocr-preview { max-width: 100%; border-radius: 10px; margin-bottom: 12px; max-height: 200px; object-fit: cover; }
+  .ocr-risultato { background: var(--panna2); border-radius: 10px; padding: 12px; margin-bottom: 12px; font-size: 13px; color: var(--testo); line-height: 1.6; max-height: 180px; overflow-y: auto; white-space: pre-wrap; }
+  #ocr-spinner { display: none; text-align: center; padding: 12px; color: var(--testo2); font-size: 13px; }
+  .progress-bar { width: 100%; height: 4px; background: var(--bordo); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--rosso); border-radius: 2px; animation: progress-anim 2s ease-in-out infinite; }
+  @keyframes progress-anim { 0%{width:5%} 50%{width:80%} 100%{width:95%} }
+
+  /* TOAST */
+  #toast {
+    position: fixed; bottom: 90px;
+    left: 50%; transform: translateX(-50%);
+    background: #333; color: white;
+    padding: 10px 20px; border-radius: 20px;
+    font-size: 13px; font-family: sans-serif;
+    z-index: 9999; opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+
+  /* RISULTATI RICERCA */
+  .ricerca-info { font-size: 12px; color: var(--testo2); margin-bottom: 8px; font-family: sans-serif; }
+
+  /* SEZIONE LABEL */
+  .section-label {
+    font-size: 11px; color: var(--testo2); text-transform: uppercase;
+    letter-spacing: 1px; font-family: sans-serif; font-weight: bold;
+    padding: 6px 4px 4px; margin-bottom: 4px;
+  }
+
+  /* EXPORT / CONDIVISIONE */
+  .modal-section-title {
+    font-size: 12px; color: var(--testo2); text-transform: uppercase;
+    letter-spacing: 1px; font-family: sans-serif; font-weight: bold;
+    margin-bottom: 10px; margin-top: 16px;
+  }
+  .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .btn-small {
+    padding: 12px 8px; border: 1.5px solid var(--bordo);
+    border-radius: 12px; background: white; color: var(--testo);
+    font-size: 13px; font-family: Georgia, serif; cursor: pointer;
+    text-align: center; transition: background 0.15s; line-height: 1.4;
+  }
+  .btn-small:active { background: var(--panna2); }
+  .btn-small.primario { background: var(--rosso); color: white; border-color: var(--rosso); }
+  .qr-wrap { text-align: center; margin: 10px 0 14px; }
+  .link-box {
+    background: var(--panna2); border-radius: 10px;
+    padding: 10px 12px; font-size: 11px; font-family: monospace;
+    word-break: break-all; color: var(--testo2); margin-bottom: 10px;
+    border: 1px solid var(--bordo); max-height: 70px; overflow-y: auto; line-height: 1.5;
+  }
+  .ricette-check-list { max-height: 200px; overflow-y: auto; margin-bottom: 12px; border: 1px solid var(--bordo); border-radius: 10px; }
+  .check-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-bottom: 1px solid var(--bordo);
+    font-size: 13px; cursor: pointer;
+  }
+  .check-item:last-child { border-bottom: none; }
+  .check-item input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--rosso); flex-shrink: 0; }
+  .tab-bar { display: flex; border-bottom: 2px solid var(--bordo); margin-bottom: 16px; gap: 0; }
+  .tab-btn {
+    flex: 1; padding: 10px 4px; border: none; background: none;
+    font-size: 12px; font-family: Georgia, serif; cursor: pointer;
+    color: var(--testo2); border-bottom: 2px solid transparent;
+    margin-bottom: -2px; transition: color 0.15s;
+  }
+  .tab-btn.active { color: var(--rosso); border-bottom-color: var(--rosso); font-weight: bold; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .det-condividi {
+    position: absolute; top: 12px; right: 120px;
+    background: rgba(255,255,255,0.25); border: none; color: white;
+    border-radius: 20px; padding: 6px 12px; font-size: 13px;
+    cursor: pointer; font-family: Georgia, serif;
+  }
+
+  /* ===== LISTA DELLA SPESA ===== */
+  #view-spesa { display: none; padding-bottom: 90px; }
+  .spesa-header {
+    background: linear-gradient(160deg, var(--verde) 0%, var(--verde2) 100%);
+    padding: 16px 16px 14px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .spesa-header-top { display: flex; align-items: center; justify-content: space-between; }
+  .spesa-title { color: white; font-size: 20px; }
+  .spesa-subtitle { color: rgba(255,255,255,0.75); font-size: 12px; margin-top: 2px; font-family: sans-serif; }
+  .spesa-add-row {
+    display: flex; gap: 8px; padding: 12px 14px;
+    background: white; border-bottom: 1px solid var(--bordo);
+    position: sticky; top: 72px; z-index: 90;
+  }
+  .spesa-add-row input {
+    flex: 1; padding: 10px 14px;
+    border: 1.5px solid var(--bordo); border-radius: 22px;
+    font-size: 14px; font-family: Georgia, serif;
+    background: var(--panna); outline: none;
+    transition: border-color 0.2s;
+  }
+  .spesa-add-row input:focus { border-color: var(--verde); }
+  .spesa-add-btn {
+    background: var(--verde); color: white;
+    border: none; border-radius: 22px;
+    padding: 10px 18px; font-size: 20px; cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .spesa-add-btn:active { opacity: 0.8; }
+  .spesa-lista { padding: 10px 14px; }
+  .spesa-sezione-titolo {
+    font-size: 11px; color: var(--testo2); text-transform: uppercase;
+    letter-spacing: 1px; font-family: sans-serif; font-weight: bold;
+    margin: 8px 0 6px; padding: 0 2px;
+  }
+  .spesa-item {
+    display: flex; align-items: center; gap: 12px;
+    background: white; border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 6px;
+    border: 1px solid var(--bordo);
+    transition: opacity 0.2s;
+  }
+  .spesa-item.completato { opacity: 0.5; }
+  .spesa-check {
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 2px solid var(--bordo); background: white;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0;
+    transition: all 0.2s; font-size: 13px;
+  }
+  .spesa-item.completato .spesa-check {
+    background: var(--verde); border-color: var(--verde); color: white;
+  }
+  .spesa-nome {
+    flex: 1; font-size: 14px; color: var(--testo);
+    transition: text-decoration 0.2s;
+  }
+  .spesa-item.completato .spesa-nome { text-decoration: line-through; color: var(--testo2); }
+  .spesa-qty {
+    font-size: 12px; color: var(--testo2); font-family: sans-serif;
+    background: var(--panna2); border-radius: 10px;
+    padding: 2px 8px;
+  }
+  .spesa-del {
+    background: none; border: none; color: var(--testo2);
+    font-size: 18px; cursor: pointer; padding: 4px;
+    border-radius: 8px; transition: color 0.15s;
+  }
+  .spesa-del:active { color: #c0392b; }
+  .spesa-vuota { text-align: center; padding: 50px 20px; color: var(--testo2); }
+  .spesa-vuota .icon { font-size: 48px; margin-bottom: 12px; }
+
+  /* SYNC STATUS */
+  .sync-indicator {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-family: sans-serif;
+    color: rgba(255,255,255,0.8); margin-top: 4px;
+  }
+  .sync-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: rgba(255,255,255,0.5);
+    transition: background 0.3s;
+  }
+  .sync-dot.online { background: #4ade80; }
+  .sync-dot.offline { background: #f87171; }
+  .sync-dot.syncing { background: #fbbf24; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* NOTIFICA BANNER */
+  .notif-banner {
+    background: var(--verde); color: white;
+    padding: 10px 14px; border-radius: 12px;
+    margin: 12px 14px 0; font-size: 13px; font-family: sans-serif;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .notif-banner span { flex: 1; }
+  .notif-banner button {
+    background: rgba(255,255,255,0.25); border: none;
+    color: white; border-radius: 16px;
+    padding: 4px 12px; font-size: 12px; cursor: pointer;
+  }
+
+  /* FIREBASE SETUP BANNER */
+  .firebase-banner {
+    background: #fef3c7; border: 1px solid #f59e0b;
+    border-radius: 12px; margin: 12px 14px; padding: 12px;
+    font-size: 12px; color: #92400e; font-family: sans-serif; line-height: 1.5;
+  }
+  .firebase-banner strong { display: block; margin-bottom: 4px; font-size: 13px; }
+  .firebase-banner a { color: #b45309; }
+
+  /* SPESA NOTIF SETTINGS */
+  .notif-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0; border-bottom: 1px solid var(--bordo);
+  }
+  .notif-row:last-child { border-bottom: none; }
+  .notif-label { font-size: 14px; color: var(--testo); }
+  .notif-desc { font-size: 11px; color: var(--testo2); font-family: sans-serif; margin-top: 2px; }
+  .toggle {
+    width: 44px; height: 24px; border-radius: 12px;
+    background: var(--bordo); position: relative;
+    cursor: pointer; transition: background 0.2s; flex-shrink: 0;
+    border: none;
+  }
+  .toggle::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: white; transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  .toggle.on { background: var(--verde); }
+  .toggle.on::after { transform: translateX(20px); }
+
+  /* ===== PDF OVERLAY (sostituisce window.open nelle WebView) ===== */
+  #pdf-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: #fff;
+    overflow-y: auto;
+    font-family: Georgia, serif;
+    color: #2a1a0e;
+  }
+  #pdf-overlay.visible { display: block; }
+  #pdf-overlay .pdf-toolbar {
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px;
+    background: #f5ede0;
+    border-bottom: 2px solid #e0cdb8;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    flex-wrap: wrap;
+  }
+  #pdf-overlay .pdf-toolbar button {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: Georgia, serif;
+    font-weight: bold;
+  }
+  #pdf-overlay .btn-back-pdf { background: #e0cdb8; color: #2a1a0e; }
+  #pdf-overlay .btn-print-pdf { background: #7c2d2d; color: white; }
+  #pdf-overlay .pdf-content {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 24px 16px 40px;
+  }
+  #pdf-overlay h1 {
+    color: #7c2d2d;
+    border-bottom: 3px solid #7c2d2d;
+    padding-bottom: 10px;
+    margin-bottom: 30px;
+    font-size: 24px;
+  }
+  #pdf-overlay .pdf-r {
+    margin-bottom: 36px;
+    border: 1px solid #e0cdb8;
+    border-radius: 10px;
+    padding: 18px;
+  }
+  #pdf-overlay .pdf-r h2 { color: #7c2d2d; margin-bottom: 4px; font-size: 19px; }
+  #pdf-overlay .pdf-r .meta { color: #6b4c30; font-size: 12px; margin-bottom: 12px; font-family: sans-serif; }
+  #pdf-overlay .pdf-r h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #6b4c30; margin: 12px 0 6px; font-family: sans-serif; }
+  #pdf-overlay .pdf-r ul { margin: 0; padding-left: 18px; }
+  #pdf-overlay .pdf-r li { margin-bottom: 3px; font-size: 14px; line-height: 1.5; }
+  #pdf-overlay .pdf-r p { margin: 0; font-size: 14px; line-height: 1.8; }
+  #pdf-overlay .pdf-r .nota { background: #fef9ec; border-left: 4px solid #c8922a; padding: 9px 12px; border-radius: 0 8px 8px 0; margin-top: 10px; font-size: 13px; color: #6b4c30; font-style: italic; }
+  @media print {
+    body > *:not(#pdf-overlay) { display: none !important; }
+    #pdf-overlay { display: block !important; position: static; overflow: visible; background: #fff; }
+    #pdf-overlay .pdf-toolbar { display: none !important; }
+    #pdf-overlay .pdf-content { padding: 10px; }
+    #pdf-overlay .pdf-r { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- OVERLAY PDF (sostituisce window.open per WebView/APK) -->
+<div id="pdf-overlay">
+  <div class="pdf-toolbar">
+    <button class="btn-back-pdf" onclick="chiudiPdfOverlay()">← Torna all'app</button>
+    <button class="btn-print-pdf" onclick="window.print()">🖨️ Stampa / Salva PDF</button>
+  </div>
+  <div class="pdf-content" id="pdf-content-body">
+  </div>
+</div>
+
+<!-- qrcode.js — genera QR lato client senza server esterni -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<!-- BANNER INSTALLAZIONE -->
+<div id="install-banner">
+  <span>📲 Installa l'app sul telefono!</span>
+  <button id="install-btn">Installa</button>
+  <button class="close-banner" id="close-banner-btn">✕</button>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- VIEW: LISTA -->
+<div id="view-lista">
+  <div class="header">
+    <div class="header-top">
+      <div>
+        <div class="header-title">📖 Il Mio Ricettario</div>
+        <div class="header-subtitle" id="subtitle-count">caricamento...</div>
+      </div>
+      <div class="header-btns">
+        <button class="btn-icon" onclick="apriFotoOCR()" title="Aggiungi da foto">📷</button>
+        <button class="btn-icon" onclick="apriGestisciCategorie()" title="Gestisci categorie">🏷️</button>
+        <button class="btn-icon" onclick="apriModalImportExport()" title="Backup e importazione">💾</button>
+      </div>
+    </div>
+    <div style="margin-top:2px">
+      <div class="sync-indicator">
+        <div class="sync-dot" id="sync-dot"></div>
+        <span id="sync-label">locale</span>
+      </div>
+    </div>
+    <div class="cerca-wrap" style="margin-top:8px">
+      <input class="cerca-input" id="cerca-input" type="search" placeholder="🔍  Cerca ricette o ingredienti..." oninput="aggiornalista()">
+    </div>
+  </div>
+
+  <div class="cat-scroll" id="cat-scroll"></div>
+  <div class="lista" id="lista"></div>
+  <button class="fab" onclick="apriNuovaRicetta()">+</button>
+</div>
+
+<!-- VIEW: DETTAGLIO -->
+<div id="view-dettaglio">
+  <div class="det-header" id="det-header">
+    <button class="det-back" onclick="tornaLista()">← Indietro</button>
+    <button class="det-edit" onclick="apriModificaRicetta()">✏️ Modifica</button>
+    <button class="det-condividi" onclick="apriCondividiRicetta()">🔗 Condividi</button>
+    <div class="det-cat-label" id="det-cat"></div>
+    <div class="det-nome" id="det-nome"></div>
+    <div class="det-porzioni" id="det-porzioni"></div>
+  </div>
+  <div class="det-body" id="det-body"></div>
+</div>
+
+<!-- VIEW: LISTA DELLA SPESA -->
+<div id="view-spesa">
+  <div class="spesa-header">
+    <div class="spesa-header-top">
+      <div>
+        <div class="spesa-title">🛒 Lista della Spesa</div>
+        <div class="spesa-subtitle" id="spesa-subtitle">0 prodotti</div>
+      </div>
+      <div class="header-btns">
+        <button class="btn-icon" onclick="apriImpostazioniNotifiche()" title="Notifiche">🔔</button>
+        <button class="btn-icon" onclick="svuotaCompletati()" title="Rimuovi completati">🗑️</button>
+      </div>
+    </div>
+    <div class="sync-indicator" style="margin-top:4px">
+      <div class="sync-dot" id="sync-dot-spesa"></div>
+      <span id="sync-label-spesa">locale</span>
+    </div>
+  </div>
+
+  <div id="firebase-warn" class="firebase-banner" style="display:none">
+    <strong>⚙️ Sincronizzazione non attiva</strong>
+    Per usare la lista su più dispositivi, configura Firebase nel file HTML.<br>
+    <a href="https://console.firebase.google.com" target="_blank">→ Vai a Firebase Console</a>
+  </div>
+
+  <div class="spesa-add-row">
+    <input type="text" id="spesa-input" placeholder="Aggiungi prodotto..." 
+      onkeydown="if(event.key==='Enter') aggiungiProdottoSpesa()">
+    <button class="spesa-add-btn" onclick="aggiungiProdottoSpesa()">+</button>
+  </div>
+
+  <div class="spesa-lista" id="spesa-lista"></div>
+  <button class="fab verde" onclick="aggiungiProdottoSpesa()">+</button>
+</div>
+
+<!-- BOTTOM NAV -->
+<div class="bottom-nav">
+  <div class="nav-btn-wrap">
+    <button class="nav-btn active" id="nav-ricette" onclick="switchView('lista')">
+      <span class="nav-icon">📖</span>
+      Ricette
+    </button>
+  </div>
+  <div class="nav-fab-spacer"></div>
+  <div class="nav-btn-wrap">
+    <button class="nav-btn" id="nav-spesa" onclick="switchView('spesa')">
+      <span class="nav-icon">🛒</span>
+      Spesa
+    </button>
+    <div class="nav-badge" id="spesa-badge">0</div>
+  </div>
+</div>
+
+<!-- MODAL: NUOVA / MODIFICA RICETTA -->
+<div class="modal-overlay" id="modal-ricetta">
+  <div class="modal-box">
+    <div class="modal-title">
+      <span id="modal-ricetta-titolo">Nuova Ricetta</span>
+      <button class="modal-close" onclick="chiudiModalRicetta()">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nome ricetta *</label>
+      <input class="form-input" id="r-nome" placeholder="es. Tiramisù della nonna">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Categoria *</label>
+      <select class="form-select" id="r-cat"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Porzioni</label>
+      <input class="form-input" id="r-porzioni" placeholder="es. 4 persone">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Ingredienti *</label>
+      <div class="ing-list" id="ing-list"></div>
+      <button class="ing-add" onclick="aggiungiIngrediente()">+ Aggiungi ingrediente</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Procedimento *</label>
+      <textarea class="form-textarea" id="r-proc" placeholder="Descrivi il procedimento passo dopo passo..."></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nota / Consiglio</label>
+      <input class="form-input" id="r-nota" placeholder="es. Ottima anche fredda!">
+    </div>
+    <button class="btn-primario" id="btn-salva-ricetta" onclick="salvaRicetta()">💾 Salva Ricetta</button>
+    <button class="btn-pericolo" id="btn-elimina-ricetta" onclick="eliminaRicetta()" style="display:none">🗑️ Elimina Ricetta</button>
+    <button class="btn-secondario" onclick="chiudiModalRicetta()">Annulla</button>
+  </div>
+</div>
+
+<!-- MODAL: GESTISCI CATEGORIE -->
+<div class="modal-overlay" id="modal-categorie">
+  <div class="modal-box">
+    <div class="modal-title">
+      <span>🏷️ Gestisci Categorie</span>
+      <button class="modal-close" onclick="chiudiModalCategorie()">✕</button>
+    </div>
+    <div id="cat-lista-gestione"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <input class="form-input" id="nuova-cat-nome" placeholder="Nome nuova categoria" style="flex:1">
+      <select class="form-select" id="nuova-cat-emoji" style="width:64px;padding:10px 4px;text-align:center;">
+        <option>🍽️</option><option>🥗</option><option>🥩</option><option>🐟</option>
+        <option>🥐</option><option>🍰</option><option>🍪</option><option>🧁</option>
+        <option>🍷</option><option>🥤</option><option>☕</option><option>🫙</option>
+        <option>🌿</option><option>🔥</option><option>❄️</option><option>⭐</option>
+      </select>
+    </div>
+    <button class="btn-primario" onclick="aggiungiCategoria()" style="margin-top:10px">+ Aggiungi Categoria</button>
+    <button class="btn-secondario" onclick="chiudiModalCategorie()">Chiudi</button>
+  </div>
+</div>
+
+<!-- MODAL: OCR / FOTO -->
+<div class="modal-overlay" id="modal-ocr">
+  <div class="modal-box">
+    <div class="modal-title">
+      <span>📷 Aggiungi da Foto</span>
+      <button class="modal-close" onclick="chiudiModalOCR()">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--testo2);margin-bottom:12px;font-family:sans-serif;">
+      Fotografa o carica un'immagine di una ricetta. L'AI estrarrà automaticamente gli ingredienti e il procedimento.
+    </p>
+    <div class="ocr-area" id="ocr-area" onclick="document.getElementById('ocr-file').click()">
+      <div class="ocr-icon">📸</div>
+      <div class="ocr-label">Tocca per scattare una foto o scegliere dalla galleria</div>
+      <input type="file" id="ocr-file" accept="image/*" capture="environment" onchange="gestisciImmagineOCR(this)">
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="btn-secondario" style="flex:1;margin:0" onclick="document.getElementById('ocr-camera').click()">📷 Fotocamera</button>
+      <button class="btn-secondario" style="flex:1;margin:0" onclick="document.getElementById('ocr-gallery').click()">🖼️ Galleria</button>
+    </div>
+    <input type="file" id="ocr-camera" accept="image/*" capture="environment" style="display:none" onchange="gestisciImmagineOCR(this)">
+    <input type="file" id="ocr-gallery" accept="image/*" style="display:none" onchange="gestisciImmagineOCR(this)">
+    <img id="ocr-preview-img" class="ocr-preview" style="display:none">
+    <div id="ocr-spinner">
+      <div>🤖 Lettura ricetta in corso...</div>
+      <div class="progress-bar"><div class="progress-fill"></div></div>
+    </div>
+    <div id="ocr-risultato" class="ocr-risultato" style="display:none"></div>
+    <button class="btn-primario" id="btn-usa-ocr" onclick="usaRisultatoOCR()" style="display:none">✅ Usa questa ricetta</button>
+    <button class="btn-secondario" id="btn-riprova-ocr" onclick="riazzeraOCR()" style="display:none">🔄 Riprova con altra foto</button>
+    <button class="btn-secondario" onclick="chiudiModalOCR()">Annulla</button>
+  </div>
+</div>
+
+<!-- MODAL: IMPOSTAZIONI NOTIFICHE -->
+<div class="modal-overlay" id="modal-notifiche">
+  <div class="modal-box">
+    <div class="modal-title">
+      <span>🔔 Promemoria Spesa</span>
+      <button class="modal-close" onclick="chiudiImpostazioniNotifiche()">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--testo2);font-family:sans-serif;margin-bottom:16px;line-height:1.5;">
+      Ricevi notifiche periodiche per non dimenticare di fare la spesa quando hai prodotti nella lista.
+    </p>
+    <div class="notif-row">
+      <div>
+        <div class="notif-label">Notifiche attive</div>
+        <div class="notif-desc">Abilita i promemoria spesa</div>
+      </div>
+      <button class="toggle" id="toggle-notif" onclick="toggleNotifiche()"></button>
+    </div>
+    <div class="notif-row">
+      <div>
+        <div class="notif-label">Frequenza</div>
+        <div class="notif-desc">Ogni quanto ricevere il promemoria</div>
+      </div>
+      <select class="form-select" id="notif-freq" style="width:130px;margin:0" onchange="salvaImpostazioniNotif()">
+        <option value="60">Ogni ora</option>
+        <option value="180">Ogni 3 ore</option>
+        <option value="360">Ogni 6 ore</option>
+        <option value="720" selected>Ogni 12 ore</option>
+        <option value="1440">Ogni giorno</option>
+      </select>
+    </div>
+    <div class="notif-row">
+      <div>
+        <div class="notif-label">Solo con prodotti</div>
+        <div class="notif-desc">Notifica solo se la lista non è vuota</div>
+      </div>
+      <button class="toggle on" id="toggle-notif-solo-prodotti" onclick="toggleNotifSoloProdotti()"></button>
+    </div>
+    <div id="notif-stato" style="margin-top:14px;padding:10px;background:var(--panna2);border-radius:10px;font-size:12px;color:var(--testo2);font-family:sans-serif;"></div>
+    <button class="btn-primario verde-btn" style="margin-top:14px" onclick="testNotifica()">🔔 Invia notifica di prova</button>
+    <button class="btn-secondario" onclick="chiudiImpostazioniNotifiche()">Chiudi</button>
+  </div>
+</div>
+
+<script>
+// ==================== DATI ====================
+const RICETTE_DEFAULT = [
+  {id:1,cat:"Antipasti",nome:"Arancini di Riso ai Gamberi",porzioni:"4 persone",ingredienti:["300 g di riso", "2 cucchiaini di curry", "150 g di gamberetti sgusciati", "1 cipolla lunga", "4 uova", "50 g di parmigiano reggiano grattugiato", "1 cucchiaino di prezzemolo tritato", "Pangrattato, olio, sale"],proc:"Tritate la cipolla unendo 2 cucchiai di olio; unite i gamberetti, salate e fate cuocere per 10 minuti. Spegnete il fuoco e aggiungete il prezzemolo. Lessate il riso in acqua leggermente salata aromatizzata col curry. Scolatelo al dente, conditelo con un filo d'olio e il parmigiano; fatelo intiepidire. Incorporatevi le uova. Preparate gli arancini: al centro di ciascuno mettete un cucchiaino di ragù di gamberetti. Passate gli arancini nelle uova e poi nel pangrattato.",nota:"Friggete in olio abbondante fino a doratura."},
+  {id:2,cat:"Antipasti",nome:"Arancini di Riso Filante",porzioni:"4 persone",ingredienti:["300 g di riso", "4-5 cucchiaini di pesto", "4-5 cucchiai di grana padano grattugiato", "2 uova", "100 g di crescenza", "Pangrattato"],proc:"Lessate il riso e conditelo con il pesto e il grana padano grattugiato; incorporate il tutto. Aggiungete 2 uova e lasciate intiepidire. Preparate gli arancini, mettendo al centro un pezzettino di crescenza. Passate le palline nelle uova sbattute e poi nel pangrattato.",nota:"Friggete in olio caldo fino a doratura uniforme."},
+  {id:3,cat:"Antipasti",nome:"Crocchette di Patate",porzioni:"",ingredienti:["5 patate fredde cotte", "3 uova", "2 fette di prosciutto cotto", "9 cucchiai di formaggio grattugiato", "2 cucchiai di pane grattugiato"],proc:"Schiacciare le patate cotte e fredde. Aggiungere le uova, il formaggio grattugiato, il prosciutto tritato finemente e il pangrattato. Mescolare bene fino ad ottenere un composto omogeneo. Formare le crocchette con le mani, passarle nel pangrattato e friggerle in olio caldo.",nota:"Ottime anche al forno a 200 gradi per 20 minuti."},
+  {id:4,cat:"Salato",nome:"Focaccia",porzioni:"",ingredienti:["500 g di farina", "1 lievito di birra", "1/2 cucchiaio di sale", "1/2 cucchiaio di zucchero", "2 cucchiai di olio", "Acqua tiepida q.b."],proc:"Sciogliere il lievito nell'acqua tiepida. Mescolare la farina con il sale e lo zucchero, aggiungere l'olio e l'acqua con il lievito sciolto. Impastare fino ad ottenere un impasto liscio ed elastico. Fare lievitare coperto in luogo caldo per circa 1 ora. Stendere su teglia oliata, fare lievitare ancora 30 minuti e infornare a 220 gradi per 20-25 minuti.",nota:"Condire con olio, sale grosso, rosmarino o pomodorini prima di infornare."},
+  {id:5,cat:"Salato",nome:"Frittata",porzioni:"",ingredienti:["3 uova", "Aglio", "Prezzemolo", "3 cucchiai di pane grattato", "Olio", "Sale", "9 cucchiai di formaggio grattugiato"],proc:"Sbattere le uova in una ciotola con il sale. Aggiungere l'aglio tritato, il prezzemolo, il formaggio grattugiato e il pane grattato. Mescolare bene. Cuocere in una padella con un filo d'olio, prima da un lato poi dall'altro, fino a doratura.",nota:"Ottima calda o a temperatura ambiente."},
+  {id:6,cat:"Salato",nome:"Girelle a 3 Colori",porzioni:"",ingredienti:["Melanzane o zucchine", "Spek", "Salame", "Sottilette"],proc:"Tagliare a fette le melanzane, rosolarle con un goccio di olio. Farle intiepidire e avvolgerle con spek e sottilette. Chiuderle con lo stecchino, tagliarle a metà ed infornarle. Servirle calde.",nota:"Ottimo antipasto o secondo sfizioso."},
+  {id:7,cat:"Salato",nome:"Involtini Valdostani",porzioni:"4 persone",ingredienti:["300 g di prosciutto cotto", "200 g di fontina", "2 uova", "150 g di pangrattato", "Olio, sale"],proc:"Disponete sul piano le fette di prosciutto, mettete al centro un pezzetto di fontina delle dimensioni di un dito. Arrotolate le fette all'interno, ripiegando le estremità per evitare che il formaggio fuoriesca. Sbattete le uova con sale, passarci gli involtini e poi nel pangrattato. Ripetere l'operazione due volte per ottenere una doppia panatura. Friggere in olio caldo fino a doratura.",nota:"Servire caldi per gustare il cuore filante di fontina."},
+  {id:8,cat:"Salato",nome:"Panzerotti",porzioni:"",ingredienti:["1 kg di farina", "2 lieviti", "Olio", "2 cucchiaini di zucchero", "1 cucchiaio e un po' di sale"],proc:"Impastare la farina con i lieviti, l'olio, lo zucchero e il sale con acqua tiepida q.b. fino ad ottenere un impasto liscio. Fare lievitare coperto per circa 1 ora. Formare i panzerotti, farcire a piacere, chiudere bene e friggere in olio caldo.",nota:"Classico street food del Sud Italia. Ottimi ripieni di pomodoro e mozzarella."},
+  {id:9,cat:"Salato",nome:"Penne al Martini",porzioni:"",ingredienti:["280 g di burro", "1 spicchio di aglio", "Penne", "Martini bianco"],proc:"Soffriggere l'aglio nel burro, aggiungere un dito di Martini bianco. Lessare la pasta e saltare il tutto.",nota:"Un primo piatto veloce e dal sapore insolito."},
+  {id:10,cat:"Salato",nome:"Pizza di Patate",porzioni:"",ingredienti:["300 g di farina", "300 g di patate già sbucciate", "8 cucchiai di olio", "2 lieviti", "2 uova", "1/2 cucchiaino di sale fino", "Latte q.b."],proc:"Mescolare tutto con impasto lento e lievitare per 1h 20 min. Forno 230 gradi: prima 15 min. sotto poi 15 min. sopra e sotto.",nota:""},
+  {id:11,cat:"Salato",nome:"Pizza (Versione 1 e 2)",porzioni:"",ingredienti:["600 g di farina", "1 o 1 e 1/2 lievito", "1 tazzone di latte tiepido", "1 cucchiaino scarso di zucchero", "1 cucchiaino di sale"],proc:"Sciogliere il lievito nel latte tiepido con lo zucchero. Unire la farina e il sale, impastare fino ad ottenere un impasto liscio ed elastico. Lasciar lievitare per almeno 1 ora. Stendere su teglia unta e condire a piacere.",nota:""},
+  {id:12,cat:"Salato",nome:"Pizza Rustica con Ricotta",porzioni:"",ingredienti:["500 g abbondanti di ricotta fresca", "2 uova", "6 cucchiai di formaggio", "Prosciutto a dadini"],proc:"Mescolare la ricotta con le uova, il formaggio e il prosciutto a dadini. Stendere il ripieno su una base di pasta frolla o brisé. Coprire con altra pasta e cuocere in forno a 180 gradi per 35-40 minuti.",nota:"Ottima sia calda che fredda."},
+  {id:13,cat:"Salato",nome:"Pizza Rustica (con Carne)",porzioni:"",ingredienti:["500 g di carne macinata", "1 pelato", "Cipolla", "Olio", "Prosciutto a dadini", "2 uova", "6 cucchiai di formaggio", "Sale"],proc:"Soffriggere cipolla, prosciutto e olio. Aggiungere la carne macinata e il pelato, cuocere. Unire le uova e il formaggio. Disporre il ripieno su una base di pasta. Spennellare con un uovo battuto e infornare a 180 gradi per 35-40 minuti.",nota:""},
+  {id:14,cat:"Salato",nome:"Polpettone",porzioni:"",ingredienti:["500 g di carne macinata", "2 uova", "3 dl latte", "Cipolla", "Sale", "6 cucchiai di formaggio", "Pane bagnato"],proc:"Mescolare la carne macinata con le uova, il formaggio, la cipolla tritata, il pane bagnato strizzato e il sale. Formare il polpettone e cuocerlo in forno a 180 gradi per circa 45 minuti, bagnandolo periodicamente con il latte.",nota:""},
+  {id:15,cat:"Salato",nome:"Porcellini",porzioni:"",ingredienti:["400 g di farina", "3 cucchiai colmi di olio", "3 cucchiaini di zucchero", "1 lievito", "Un pizzico di sale", "Acqua tiepida"],proc:"Impastare tutti gli ingredienti con acqua tiepida. Far lievitare il composto per un'ora. Ungere il tegame di olio. Formare i porcellini, battere l'uovo e ungere i porcellini prima di infornare. Cuocere a 180 gradi per circa 20 minuti.",nota:""},
+  {id:16,cat:"Salato",nome:"Risotto allo Speck",porzioni:"4 persone",ingredienti:["400 g di riso", "160 g di speck", "1,5 l di brodo", "1 cipolla", "20 g di burro", "2 cucchiai di panna fresca", "Parmigiano q.b."],proc:"In una casseruola fare soffriggere nel burro la cipolla tritata e lo speck tritato. Unire il riso e lasciare insaporire. Durante la cottura allungare col brodo. A fine cottura aggiungere la panna, amalgamare bene e cospargere con il parmigiano.",nota:""},
+  {id:17,cat:"Creme & Basi",nome:"Pan di Spagna",porzioni:"",ingredienti:["6 uova", "200 g di zucchero", "150 g di farina", "Sale"],proc:"Sgusciate le uova separando gli albumi dai tuorli. Montate questi ultimi in una coppa con lo zucchero fino ad ottenere un composto chiaro e schiumoso. Montate a neve gli albumi con un pizzico di sale e incorporateli al composto. Unite la farina e girate il tutto delicatamente. Versate il composto in uno stampo rivestito di carta da forno già caldo a 180 gradi per 40 minuti.",nota:"Base classica per torte farcite, charlotte e tiramisù."},
+  {id:18,cat:"Creme & Basi",nome:"Pasta Biscuit",porzioni:"",ingredienti:["70 g di farina", "60 g di zucchero", "4 uova", "50 g di burro"],proc:"Sgusciate 2 uova ed un tuorlo, con le fruste elettriche unite lo zucchero e lavorate fino ad ottenere un composto schiumoso. Unite la farina, un po' alla volta, poi aggiungete il burro fuso e intiepidito, versato a filo. Raffreddate i 2 albumi e uniteli. Montate a neve gli albumi con un pizzico di sale e incorporateli al composto. Imburrate la placca da forno, copritela con la carta da forno e stendete il composto. Mettete in forno già caldo a 180 gradi per 40 minuti.",nota:"Base versatile per rotoli e dolci farciti."},
+  {id:19,cat:"Creme & Basi",nome:"Pasta Brisé",porzioni:"",ingredienti:["250 g di farina", "125 g di burro", "Un pizzico di sale"],proc:"Fate la fontana con la farina, spolveratela con un po' di sale. Mettete il burro morbido tagliato a dadini. Amalgamate il tutto aiutandovi con il coltello incorporando il burro nella farina fino ad ottenere un impasto granuloso. Spruzzate l'impasto con acqua, aggiungete mezzo bicchiere di acqua. Formate un panetto, avvolgetelo in carta da forno, e fatelo riposare per mezz'ora in frigo, poi stendetelo con il mattarello.",nota:"Ideale per quiche, torte salate e crostate rustiche."},
+  {id:20,cat:"Creme & Basi",nome:"Pasta da Strudel",porzioni:"",ingredienti:["300 g di farina", "1 uovo", "100 g di burro", "1 cucchiaio di zucchero", "Sale"],proc:"Formare la fontana con la farina. Mettete al centro l'uovo, un pizzico di sale e lo zucchero. Unire 4 dl di acqua tiepida. Lavorate la pasta, avvolgetela in un foglio di pellicola e fatela riposare per un'ora. Allargate la pasta con il matterello, poi allargatela con il dorso delle mani infarinate fino a renderla sottilissima, quasi trasparente.",nota:"La pasta deve diventare sottilissima per lo strudel classico."},
+  {id:21,cat:"Creme & Basi",nome:"Pasta Frolla",porzioni:"",ingredienti:["125 g di burro", "250 g di farina", "125 g di zucchero", "2 tuorli", "Sale", "Vanillina"],proc:"Setacciate la farina e fate la fontana. Mettete al centro il burro tagliato a dadini, morbido, e impastate velocemente i due ingredienti fino a che si formeranno piccole briciole. Mettete al centro i tuorli, sale e vanillina. Riunite la pasta. Lavorare l'impasto rapidamente con la palma della mano, schiacciatelo a metà, ruotatelo di 45 gradi e ripetete una seconda volta l'operazione. Avvolgete in pellicola e riponete in frigo per almeno 30 minuti.",nota:"La pasta frolla non va lavorata a lungo per restare friabile."},
+  {id:22,cat:"Creme & Basi",nome:"Pasta Sfoglia",porzioni:"",ingredienti:["300 g di farina", "300 g di burro", "Sale"],proc:"Setacciate 225 g di farina nella fontana. Aggiungete il sale e versate 100 g di acqua abbondante. Lavorare l'impasto per 5 minuti, formate un panetto e mettetelo in frigo per mezz'ora coperto. Nel frattempo lavorate la farina rimasta insieme al burro e formate un secondo panetto. Mettetelo in frigo per mezz'ora. Stendete il primo panetto in una sfoglia quadrata, appoggiatevi al centro il secondo panetto di burro. Ripiegatevi la pasta verso il centro dai 4 angoli. Con il mattarello stendete in un rettangolo. Giratelo e ripiegatelo 3 volte. Stendete di nuovo, avvolgete in carta da forno e mettete in frigo per 15 minuti. Ripetete 2 volte l'operazione.",nota:"La pasta sfoglia richiede pazienza ma il risultato vale lo sforzo."},
+  {id:23,cat:"Creme & Basi",nome:"Pesto alla Genovese",porzioni:"",ingredienti:["150 g di basilico", "30 g di pinoli", "50 g di parmigiano", "35 g di pecorino", "1 o 2 spicchi di aglio", "Olio"],proc:"Mischiare parmigiano, pecorino e pinoli. Aggiungere poi basilico, aglio e olio. Frullare tutto insieme aggiungendo olio a filo fino ad ottenere la consistenza desiderata.",nota:"Il pesto autentico si prepara nel mortaio, ma il frullatore va bene per uso quotidiano."},
+  {id:24,cat:"Creme & Basi",nome:"Crema al Burro",porzioni:"",ingredienti:["350 g di zucchero a velo", "100 g di burro o margarina (ammorbidita)", "150 g di margarina", "3 cucchiai di latte caldo"],proc:"Lavorare con il frullatore il burro/margarina ammorbidita con lo zucchero a velo. Aggiungere il latte caldo cucchiaio per cucchiaio continuando a frullare fino a crema liscia e soffice.",nota:"Ottima per farcire e decorare torte."},
+  {id:25,cat:"Creme & Basi",nome:"Crema al Caffè",porzioni:"4 coppette",ingredienti:["4 uova", "150 g di cioccolato fondente", "100 g di panna", "2 cucchiai di caffè fondente", "Rum q.b.", "120 g di zucchero", "8 cialde"],proc:"Riunite in una ciotola i tuorli, lo zucchero e il caffè; montate il tutto fino a composto spumoso. Incorporare 60 g di cioccolato sciolto a bagnomaria e intiepidito, 2 cucchiai di rum, la panna montata (meno 3 cucchiai), il cioccolato rimasto grattugiato e gli albumi montati a neve ben ferma. Distribuire in 4 coppette e mettere in frigo per almeno 3 ore. Servire decorando con la panna rimasta.",nota:"Ottima anche come farcitura per torte al cioccolato."},
+  {id:26,cat:"Creme & Basi",nome:"Crema al Limone",porzioni:"",ingredienti:["4 uova", "100 g di burro", "200 g di zucchero", "4 limoni succosi", "4 cucchiai di crema pasticciera"],proc:"Fate fondere il burro a bagnomaria, unite il succo e la scorza grattugiata dei limoni, lo zucchero e le uova. Mescolate continuando a cuocere con una frusta finché la crema risulterà densa. Toglietela dal bagnomaria ancora calda e passatela attraverso un colino a maglie fitte. Lasciatela raffreddare mescolando di tanto in tanto. Incorporate bene la crema pasticciera.",nota:"Si conserva in frigo per 3-4 giorni coperta con pellicola a contatto."},
+  {id:27,cat:"Creme & Basi",nome:"Crema al Limone (base semplice)",porzioni:"",ingredienti:["1/2 l di latte tiepido", "3 cucchiai di zucchero", "2 cucchiai di farina", "2 tuorli", "Scorza di limone"],proc:"Sbattere i tuorli con lo zucchero, aggiungere la farina setacciata e il latte tiepido a filo. Cuocere a fuoco basso mescolando continuamente finché la crema si addensa. Aggiungere la scorza di limone durante la cottura.",nota:"Ricetta base versatile per farcire crostate e dolci."},
+  {id:28,cat:"Creme & Basi",nome:"Crema Chantilly",porzioni:"",ingredienti:["500 g di panna fresca", "50 g di zucchero a velo"],proc:"La panna deve essere molto fredda dal frigo. Metterla in una terrina, unire lo zucchero a velo e amalgamare i due ingredienti. Sbattere con la frusta dal basso verso l'alto, con un movimento non circolare, finché la panna avrà raddoppiato il suo volume e sarà ben soda.",nota:"Può essere aromatizzata con vaniglia, cioccolato o liquori."},
+  {id:29,cat:"Creme & Basi",nome:"Crema Diplomatica",porzioni:"",ingredienti:["400 g di crema pasticciera aromatizzata con vaniglia", "400 g di panna fresca", "Rum o altro liquore a piacere"],proc:"Preparate la crema pasticciera e lasciatela raffreddare completamente. Versatela in un recipiente contenente cubetti di ghiaccio. Montate molto densamente la panna e incorporatela delicatamente alla crema pasticciera, profumata con 3 cucchiai di rum. Tenete la crema in frigo fino al momento di servirla.",nota:"Ottima per farcire pan di spagna, bignè e millefoglie."},
+  {id:30,cat:"Creme & Basi",nome:"Crema Inglese",porzioni:"",ingredienti:["5 dl di latte", "6 tuorli", "125 g di zucchero", "Una scorza di limone"],proc:"Portate a ebollizione il latte con la scorza di limone e metà dello zucchero. Nel frattempo sbattete i tuorli leggermente con lo zucchero rimasto. Intiepidire il latte e, dopo aver eliminato la scorza di limone, versatelo a filo sui tuorli sbattendo continuamente. Cuocete la crema a bagnomaria, finché si addensa. Toglietela dal bagnomaria e passate ancora calda attraverso un colino.",nota:"Perfetta per accompagnare charlotte, budini e dolci al cucchiaio."},
+  {id:31,cat:"Creme & Basi",nome:"Crema Mascarpone",porzioni:"",ingredienti:["4 tuorli", "250 g di mascarpone", "0,5 dl di rum bianco", "120 g di zucchero"],proc:"Mettete i tuorli in una terrina, mescolate bene lo zucchero e lavoratelo a mano finché otterrete una crema soffice e spumosa. Versate il rum e aggiungete il mascarpone a cucchiaiate, incorporandolo via via. Coprite con pellicola e tenete in frigo fino al momento di utilizzarla.",nota:"La base ideale per il tiramisù."},
+  {id:32,cat:"Creme & Basi",nome:"Crema Pasticciera",porzioni:"",ingredienti:["8 dl di latte", "4 tuorli", "100 g di zucchero", "50 g di farina", "Una scorza di limone", "Una noce di burro", "Sale"],proc:"Fate bollire il latte con la scorza di limone e metà dello zucchero. Sbattete i tuorli con lo zucchero rimasto e la farina. Lasciate riposare il latte rimasto qualche minuto e versatelo a filo sui tuorli sbattendo. Cuocete la crema a fuoco basso, finché diventerà abbastanza densa e consistente. Toglietela dal fuoco, aggiungete il burro.",nota:"Base fondamentale della pasticceria italiana."},
+  {id:33,cat:"Creme & Basi",nome:"Crème Brûlée",porzioni:"4 persone",ingredienti:["4 dl di panna", "4 tuorli", "120 g di zucchero", "20 g di burro", "Un baccello di vaniglia", "4 cucchiaini di cannella in polvere"],proc:"Portate a ebollizione la panna col baccello di vaniglia inciso con un coltello. Lasciate bollire per 5 minuti e fate intiepidire. Sbattete leggermente i tuorli. Spegnete e versatele in un polsonetto a bagnomaria su fuoco basso, unite 50 g di zucchero, sbatteteli fino a composto chiaro e gonfio. Montate la panna e incorporatela poco a poco mescolando circa 10 minuti finché la crema si addensa.",nota:"Prima di servire cospargere di zucchero e caramellare con il cannello."},
+  {id:34,cat:"Creme & Basi",nome:"Crêpes Calde",porzioni:"",ingredienti:["250 g di farina", "60 g di zucchero", "3,5 dl di latte", "3 uova", "40 g di burro", "40 g di zucchero a velo", "1 vanillina"],proc:"Mescolare la farina con lo zucchero, aggiungere le uova uno alla volta, poi il latte a filo mescolando per evitare grumi. Aggiungere il burro fuso e intiepidito e la vanillina. Lasciare riposare la pastella per 30 minuti. Cuocere le crêpes in una padellina antiaderente imburrata.",nota:"Farcire a piacere con marmellata, Nutella, crema o zucchero e limone."},
+  {id:35,cat:"Dolci",nome:"Babà al Limoncello",porzioni:"6-8 persone",ingredienti:["500 g di farina", "50 g di zucchero", "4 uova", "Scorza di 1/2 limone grattugiata", "Vanillina", "20 g di lievito di birra", "Latte q.b.", "200 g di burro", "Sale", "250 g di zucchero", "Una scorzetta di limone", "9 cucchiai di limoncello", "2 cucchiai di gelatina di limone per decorare", "2 dl di panna (facoltativa)"],proc:"Sbriciolate il lievito di birra in un cucchiaio di latte tiepido. Setacciate la farina e lavoratela con la scorza di limone, vanillina, le uova, lo zucchero e il sale; incorporate il burro. Aggiungete uno o 2 cucchiai di latte se il composto fosse troppo denso. Lavorate il tutto, copritelo e lasciatelo lievitare per 1 ora. Imburrate e spolverizzate di farina lo stampo da babà. Riempitelo a metà e lasciate ancora lievitare finché la pasta avrà raggiunto l'orlo. Cuocete in forno a 200 gradi per 40 minuti. Preparate lo sciroppo: portate a ebollizione lo zucchero con 150 ml d'acqua, aggiungete la scorzetta di limone, cuocete 5 minuti poi aggiungete il limoncello. Immergete il babà caldo nello sciroppo.",nota:"Il babà va inzuppato nello sciroppo ancora caldo per assorbire al meglio."},
+  {id:36,cat:"Dolci",nome:"Baci di Dama",porzioni:"circa 30 biscotti",ingredienti:["100 g di farina", "120 g di zucchero", "100 g di mandorle", "100 g di burro", "1 bustina di vanillina", "150 g di cioccolato fondente"],proc:"Tritare le mandorle ed unirle a tutti gli altri ingredienti. Formare tante palline delle dimensioni di una grossa nocciola e disporle su una placca unta. Cuocetele in forno a 140 gradi per circa un'ora. Quando siano cotte, fatele raffreddare. Fondere a bagnomaria il cioccolato. Sistemare un cucchiaino fuso su ogni biscotto, sovrapporre un secondo biscotto. Mettere in frigorifero per far rapprendere il cioccolato.",nota:""},
+  {id:37,cat:"Dolci",nome:"Bounty",porzioni:"circa 20 barrette",ingredienti:["250 g di zucchero", "500 g di cocco essiccato", "60 g di miele d'acacia", "300 g di albume liquido", "Bacca di vaniglia", "Sale", "80 g di amido di riso/frumento"],proc:"Macinare zucchero e cocco. Scaldare tutti gli ingredienti a 70 gradi. Far raffreddare leggermente e fare le barrette o palline. Infornare a 180 gradi per 7-8 minuti.",nota:"Potete rivestire le barrette con cioccolato fondente fuso."},
+  {id:38,cat:"Dolci",nome:"Budino al Cioccolato",porzioni:"4-6 persone",ingredienti:["150 g di burro", "800 ml di latte", "180 g di cioccolato fondente", "80 g di farina", "160 g di zucchero"],proc:"Intiepidire il latte. Sciogliere il burro a fuoco lento, versare lo zucchero e il cioccolato tritato. Mescolare con una frusta. Aggiungere la farina, versare il latte bollente e cuocere a fuoco basso fino alla condensazione. Bollire il tutto per 5 min. Versarlo in uno stampo, lasciarlo intiepidire e metterlo in frigo.",nota:"Servire freddo, eventualmente con panna montata."},
+  {id:39,cat:"Dolci",nome:"Castagnaccio",porzioni:"6-8 persone",ingredienti:["2 uova", "250 g di farina di castagne", "125 g di farina 00", "200 g di zucchero", "1/2 L di latte", "30 g di olio di semi", "1 cucchiaio di bicarbonato", "Cacao amaro q.b.", "1 cucchiaino di Pane degli Angeli", "Pinoli per decorare"],proc:"Mescolare le farine, lo zucchero, il bicarbonato e il cacao amaro. Aggiungere le uova, l'olio e il latte mescolando fino a un impasto omogeneo. Versare in uno stampo imburrato, decorare con i pinoli e cuocere in forno preriscaldato a 180 gradi per 35-40 minuti.",nota:"Decorarlo con i pinoli prima di infornare."},
+  {id:40,cat:"Dolci",nome:"Charlotte di Mele",porzioni:"6-8 persone",ingredienti:["1 kg di mele", "100 g di burro", "150 g di zucchero", "1 limone", "80 g di confettura di albicocche", "600 g di pane carrè", "60 g di zucchero a velo", "2,5 dl di crema inglese"],proc:"Sbucciate le mele e tagliatele a fette spesse. Fate fondere 30 g di burro, unite le mele, 1,5 dl d'acqua, lo zucchero e la scorza di limone grattugiata. Portate a ebollizione, cuocete finché il liquido sarà assorbito. Frullate e incorporate la confettura di albicocche. Togliete la crosta dal pane carrè. Imburrate e ricoprite fondo e pareti dello stampo con le fette di pane. Riempite con la composta di mele e coprite con le fette rimanenti. Cuocete in forno a 180 gradi per 40 minuti. Capovolgete su un piatto, spolverate di zucchero a velo e servite con la crema inglese.",nota:"Servire tiepida con crema inglese."},
+  {id:41,cat:"Dolci",nome:"Chiacchiere",porzioni:"4-6 persone",ingredienti:["250 g di farina", "1 uovo", "50 g di burro", "4 cucchiai di marsala", "1 cucchiaio di zucchero", "Scorzetta di un limone grattugiata", "2-3 cucchiai di latte"],proc:"Unire tutti gli ingredienti e lasciar riposare per un'ora. Tirare la sfoglia sottile, tagliarla in strisce, pizzicarle e friggerle in olio bollente. Scolarle e cospargerle con abbondante zucchero a velo.",nota:"Tipico dolce di Carnevale."},
+  {id:42,cat:"Dolci",nome:"Ciambella al Cacao",porzioni:"8-10 persone",ingredienti:["200 g di farina", "200 g di zucchero", "200 g di burro", "200 g di cioccolato fondente", "4 uova", "1 bustina di Pane degli Angeli", "50 g di latte"],proc:"Sciogliere il cioccolato fondente a bagnomaria. Montare il burro con lo zucchero, aggiungere le uova una alla volta, poi la farina setacciata con il lievito, il latte e il cioccolato fuso. Versare in uno stampo a ciambella imburrato e infarinato. Cuocere a 180 gradi per circa 40 minuti.",nota:""},
+  {id:43,cat:"Dolci",nome:"Ciambella al Caffè",porzioni:"8-10 persone",ingredienti:["6 uova", "150 g di zucchero", "1 bustina di vanigliato a velo", "150 g di farina", "50 g di cioccolato fondente", "1 tazzina di caffè fondente", "A piacere: albicocche e arance candite", "Burro", "Zucchero a velo"],proc:"Sbattere i tuorli con lo zucchero e il vanigliato fino a un composto chiaro e spumoso. Incorporare il cioccolato fuso a bagnomaria e intiepidito, il caffè, la farina. Infine unire gli albumi montati a neve mescolando dal basso verso l'alto. Versare in uno stampo ad anello imburrato e infarinato. Cuocere a 180 gradi per circa 40 minuti. Servire cosparsa di zucchero a velo.",nota:"Le albicocche e arance candite arricchiscono il dolce aggiunte all'impasto."},
+  {id:44,cat:"Dolci",nome:"Ciambella al Cardamomo",porzioni:"8-10 persone",ingredienti:["1 cucchiaio di cardamomo macinato", "150 g di farina", "100 g di fecola", "4 uova", "150 g di zucchero", "150 g di burro", "Vanillina", "4 bustine di lievito (Pane degli Angeli)", "1 dl di panna", "30 g di cacao amaro"],proc:"Lavorare il burro morbido con lo zucchero e la vanillina fino a crema soffice. Incorporare le uova, il cardamomo e la panna. Aggiungere la farina con la fecola, il lievito e il cacao amaro. Dividere in 2 parti. Incorporare gli albumi montati a neve. Versare i due composti a cucchiaiate alternate nello stampo imburrato. Cuocere a 180 gradi per circa 45 minuti.",nota:"L'effetto bicolore si ottiene versando le due parti alternate."},
+  {id:45,cat:"Dolci",nome:"Ciambella allo Yogurt",porzioni:"8 persone",ingredienti:["4 uova", "1 vasetto di yogurt", "2 vasetti di zucchero", "3 vasetti di farina", "1/2 vasetto di olio", "1 bustina di Pane degli Angeli"],proc:"Mescolare tutti gli ingredienti insieme fino ad ottenere un impasto omogeneo. Versare in uno stampo a ciambella imburrato e infarinato. Cuocere a 180 gradi per circa 35-40 minuti.",nota:"Il vasetto di yogurt funge da misurino per tutte le dosi. Semplice e sempre riuscita!"},
+  {id:46,cat:"Dolci",nome:"Ciambella Bianco-Nera",porzioni:"8-10 persone",ingredienti:["3 uova", "100 g di burro", "350 g di farina", "200 g di zucchero", "Latte q.b.", "Pane degli Angeli", "Cacao amaro per una parte"],proc:"Montare il burro morbido con lo zucchero, aggiungere le uova, la farina setacciata con il lievito e il latte necessario. Dividere in due parti: a una aggiungere cacao amaro. Versare le due parti alternativamente nello stampo imburrato per l'effetto bicolore. Cuocere a 180 gradi per circa 40-45 minuti.",nota:""},
+  {id:47,cat:"Dolci",nome:"Ciambella con Nutella",porzioni:"8-10 persone",ingredienti:["200 g di farina", "200 g di zucchero", "150 g di burro", "2 uova", "Cacao amaro", "Pane degli Angeli", "250 g di mascarpone", "1 tuorlo", "1 barattolo di Nutella"],proc:"Montare il burro con lo zucchero, aggiungere le uova, la farina con il lievito e il cacao. Per il ripieno: mescolare mascarpone, tuorlo e Nutella fino a crema liscia. Versare metà impasto nello stampo, distribuire il ripieno al centro e coprire col resto. Cuocere a 180 gradi per circa 40-45 minuti.",nota:""},
+  {id:48,cat:"Dolci",nome:"Dolcetti al Cacao di Antonella",porzioni:"",ingredienti:["500 g di farina", "250 g di zucchero", "100 g di burro", "2 uova", "1 bustina di Pane degli Angeli", "6 cucchiai di cacao amaro", "6 cucchiai di cacao dolce", "1 limone grattugiato", "Caffè amaro per unire l'impasto"],proc:"Mescolare tutti gli ingredienti secchi. Aggiungere il burro morbido, le uova e il caffè amaro quanto basta per ottenere un impasto malleabile. Formare le palline e schiacciarle leggermente, passarle nello zucchero a velo. Disporre i dolcetti su carta forno e cuocere a 180 gradi per 20 minuti.",nota:"Ricetta di Antonella Usai."},
+  {id:49,cat:"Dolci",nome:"Ferri di Cavallo",porzioni:"",ingredienti:["300 g di farina", "150 g di zucchero", "125 g di burro sciolto a temperatura ambiente", "1 limone grattugiato", "1 uovo intero", "1 tuorlo"],proc:"Impastare tutti gli ingredienti fino ad ottenere un impasto omogeneo. Fare riposare in frigo per 1/2 ora. Formare i biscotti a forma di ferro di cavallo. Cuocere in forno a 180 gradi per circa 15 minuti fino a doratura.",nota:"Ottimi anche ricoperti di cioccolato fondente fuso."},
+  {id:50,cat:"Dolci",nome:"Flan di Pesche Caramellato",porzioni:"6-8 persone",ingredienti:["300 g di pasta frolla", "2,5 dl di crema pasticciera", "150 g di pan di spagna", "Burro e farina", "500 g di pesche gialle mature", "100 g di zucchero", "2 cucchiai di maraschino", "Succo di limone"],proc:"Sbucciate le pesche e affettatele. Fate caramellare lo zucchero con 1/3 del suo peso di acqua e diluitelo con un cucchiaio di succo di limone. Imburrate e infarinate uno stampo, foderatelo di pasta frolla e punzecchiatelo in fondo. Tagliate il pan di spagna a fettine sottilissime, spruzzatele con maraschino, disponetele sulla base di pasta frolla, coprite con la crema e distribuite sopra le fette di pesca. Cuocete il dolce in forno preriscaldato a 180 gradi per 40 minuti, lasciatelo intiepidire, versatevi sopra il caramello e servire.",nota:""},
+  {id:51,cat:"Dolci",nome:"Focaccia alla Frutta",porzioni:"8-10 persone",ingredienti:["530 g di farina", "40 g di lievito di birra", "Latte tiepido q.b.", "250 g di burro", "220 g di zucchero", "3 uova", "1 grossa pera", "1 cestino di lamponi", "1 cestino di mirtilli", "50 g di pinoli sgusciati", "Cannella in polvere", "Sale"],proc:"Impastate 30 g di farina con il lievito sbriciolato, un cucchiaio di zucchero e pochissimo latte tiepido. Coprite e fate lievitare per 30 minuti. Lavorate la farina rimasta con 200 g di burro, 150 g di zucchero, le uova, una presa di sale e un cucchiaino di cannella. Aggiungete il panetto lievitato e impastate energicamente. Incorporate la pera a pezzetti, i mirtilli e i lamponi infarinati, e i pinoli. Stendete in una teglia imburrata. Fate lievitare 1 ora. Cospargete con 50 g di burro in fiocchetti, lo zucchero rimasto e cannella. Cuocete a 220 gradi per 30 minuti.",nota:""},
+  {id:52,cat:"Dolci",nome:"Frittelle di Mele",porzioni:"",ingredienti:["600 g di mele", "125 g di farina", "120 g di zucchero", "2 uova", "20 g di burro morbido", "1,2 dl di latte"],proc:"Sbucciare le mele e tagliarle a fettine. Impastare tutti gli ingredienti in una ciotola. Unire poche alla volta le fettine di mela, prenderle con un cucchiaio scolandole dalla pastella in eccesso e friggerle in olio bollente. Lasciar dorare da entrambi i lati, scolare e passare su carta assorbente. Disporre su un piatto da portata e spolverizzate con lo zucchero a velo.",nota:"Ottime anche con mele renette o golden."},
+  {id:53,cat:"Dolci",nome:"Granita al Limone",porzioni:"",ingredienti:["500 g di acqua", "200 g di zucchero", "Succo di 4 limoni freschi"],proc:"Portare acqua e zucchero a ebollizione, far raffreddare leggermente. Aggiungere il succo dei limoni filtrato. Mettere il composto in freezer, mescolando ogni 30 minuti con una forchetta per rompere i cristalli di ghiaccio, fino ad ottenere la consistenza granulosa tipica della granita.",nota:"Servire in coppette fredde, eventualmente con foglie di menta fresca."},
+  {id:54,cat:"Dolci",nome:"Kraf (Bomboloni Fritti)",porzioni:"circa 20 pezzi",ingredienti:["300 g di farina", "Latte q.b.", "2 uova", "2 tuorli", "60 g di burro", "60 g di zucchero", "20 g di lievito di birra", "Vanillina", "Olio per friggere", "3 dl di crema pasticciera", "Sale"],proc:"Preparare un impasto semifluido con 50 g di farina, il lievito sbriciolato, un cucchiaino di zucchero e acqua tiepida. Lasciarlo lievitare coperto per 45 minuti. Impastare a lungo il panetto lievitato con la farina e lo zucchero rimasti, le uova, i tuorli, il burro morbido, vanillina e sale. Fare lievitare coperto per un paio d'ore. Stendere la pasta e ricavare dischi da 8 cm. Lasciare lievitare ancora un'ora. Friggere in abbondante olio a calore medio, rigirandoli a metà cottura. Scolate, praticare un'incisione laterale e farcire di crema pasticciera. Spolverizzare di zucchero.",nota:"La crema può essere sostituita con marmellata o crema al cioccolato."},
+  {id:55,cat:"Dolci",nome:"Crostata al Limone (versione 1)",porzioni:"8 persone",ingredienti:["200 g di farina", "100 g di burro", "Un pizzico di sale", "1/2 bicchiere di acqua", "4 uova", "100 g di burro", "200 g di zucchero", "1 limone grattugiato, spremuto e filtrato"],proc:"Per la pasta: impastare farina, burro, sale e acqua. Fare riposare per 1/2 ora in frigo. Stendere la pasta in una tortiera imburrata. Per la crema: mescolare le uova con lo zucchero, il succo e la scorza del limone e il burro. Cuocere a bagnomaria mescolando fino ad addensare. Versare la crema sulla pasta. Cuocere in forno preriscaldato a 180 gradi per circa 40 minuti.",nota:""},
+  {id:56,cat:"Dolci",nome:"Crostata al Limone (versione 2)",porzioni:"8-10 persone",ingredienti:["400 g di farina", "150 g di zucchero", "150 g di margarina sciolta", "2 uova intere", "1 tuorlo", "Pane degli Angeli", "Limone grattugiato", "50 g di fecola", "250 g di zucchero", "50 g di margarina", "500 g di acqua", "3 limoni spremuti", "2 limoni verdi grattugiati"],proc:"Per la pasta: impastare tutti gli ingredienti. Per la crema: sciogliere fecola, zucchero e margarina in acqua, aggiungere il succo dei limoni e la scorza grattugiata, fare addensare il tutto. Stendere la pasta frolla in una tortiera, versare la crema al limone e cuocere in forno a 180 gradi per circa 35 minuti.",nota:""},
+  {id:57,cat:"Dolci",nome:"Crostata di Frutta (versione 1)",porzioni:"8 persone",ingredienti:["400 g di farina", "200 g di zucchero", "1 limone grattugiato", "2 uova", "1 busta di Pane degli Angeli", "70 g di olio"],proc:"Mescolare tutti gli ingredienti e formare la pasta frolla. Stenderla in una teglia. Cuocere in forno. Quando si è raffreddata, cospargere la crema e i pezzi di frutta. Prima di infornare, spargere lo zucchero al bordo della crostata.",nota:"Guarnire con crema pasticciera e frutta fresca di stagione."},
+  {id:58,cat:"Dolci",nome:"Crostata di Frutta (versione 2)",porzioni:"8 persone",ingredienti:["400 g di farina", "200 g di zucchero", "2 uova", "70 g di olio", "1 limone grattugiato", "Un pizzico di sale", "Pane degli Angeli"],proc:"Stendere la pasta in una teglia e farla cuocere in forno. Quando si è raffreddata, cospargere la crema e i pezzi di frutta. Prima di servire spargere lo zucchero al bordo della crostata.",nota:""},
+  {id:59,cat:"Dolci",nome:"Crostata di Mele Gelatinata",porzioni:"8 persone",ingredienti:["300 g di pasta frolla", "500 g di mele", "100 g di zucchero", "2 cucchiai di cognac", "1 dl di liquore all'amaretto", "160 g di gelatina di mele cotogne", "80 g di amaretti secchi", "Burro", "Farina"],proc:"Affettate sottilmente le mele, spolverizzate con lo zucchero, versatevi il liquore all'amaretto e il cognac e lasciate marinare. Rivestite uno stampo a bordo basso del diametro di 22 cm con la pasta frolla imburrata. Spargetevi sopra gli amaretti sbriciolati. Cuocete in forno preriscaldato a 180 gradi per circa 30 minuti, poi lasciate raffreddare il dolce. Fate sciogliere la gelatina di mele cotogne con 2 cucchiai d'acqua, versatela sul dolce, lasciatela rapprendere e servire.",nota:""},
+  {id:60,cat:"Dolci",nome:"Crostata di Pesche",porzioni:"6-8 persone",ingredienti:["Pasta frolla", "1 kg di pesche mature", "Succo di un limone", "30 g di burro", "120 g di zucchero", "1 uovo"],proc:"Foderate la tortiera unta e infarinata tenendo i bordi alti 2 cm. Pelate ed affettate sottilmente le pesche, mettetele in una ciotola con il succo di limone e lo zucchero. Sgocciolate le pesche e sistematele in modo uniforme. Cospargete con fiocchetti di burro. Sigillate bene i bordi, spennellate con uovo sbattuto e cuocete in forno caldo a 180 gradi per circa un'ora.",nota:""},
+  {id:61,cat:"Dolci",nome:"Crostata di Ricotta",porzioni:"6-8 persone",ingredienti:["300 g di farina", "1 bicchiere di olio scarso", "Pizzico di sale", "Acqua tiepida q.b.", "500 g di ricotta", "2 uova", "150 g di zucchero"],proc:"Preparare la pasta frolla senza burro mescolando farina, olio, sale e acqua tiepida. Stendere in una tortiera. Per la farcitura: mescolare la ricotta con le uova e lo zucchero fino a crema omogenea. Versare sulla pasta e cuocere in forno a 180 gradi per circa 35-40 minuti.",nota:"Una pasta frolla leggera senza burro, ideale con il ripieno cremoso di ricotta."},
+  {id:62,cat:"Dolci",nome:"Lemon Pie",porzioni:"8 persone",ingredienti:["300 g di farina", "200 g di burro", "160 g di zucchero", "3 tuorli", "Scorza grattugiata di un limone", "Sale", "50 g di burro", "2 limoni non trattati", "2 uova", "270 g di zucchero", "Crema pasticciera", "3 albumi", "Essenza di limone", "Essenza di vaniglia", "Sale"],proc:"Preparate la pasta frolla e tenetela in frigo almeno un'ora. Stendetela e foderate una tortiera imburrata da 24 cm. Punzecciate il fondo, coprite con carta oleata e riempite di riso o legumi secchi. Cuocete in forno a 180 gradi per 25 minuti. Fate fondere il burro a bagnomaria, aggiungete il succo e la scorza dei limoni, 100 g di zucchero e le uova; mescolate fino ad addensare. Incorporate 2 cucchiai abbondanti di crema pasticciera e stendete sulla base raffreddata. Montate gli albumi a neve finissima con sale, 150 g di zucchero e le essenze; spalmate la crema sul dolce. Fate dorare la superficie in forno a 200 gradi per qualche minuto.",nota:"La meringa deve essere dorata ma non bruciata."},
+  {id:63,cat:"Dolci",nome:"Linz Torte (Crostata)",porzioni:"8 persone",ingredienti:["350 g di farina", "120 g di mandorle tritate", "150 g di zucchero a velo", "2 uova", "1 tuorlo", "200 g di burro", "1 bustina di vanillina", "Scorza tritata di un limone", "1 cucchiaino di cannella in polvere", "250 g di confettura di lamponi", "Sale"],proc:"Versate la farina a fontana sulla spianatoia. Unite le mandorle, lo zucchero, sale, cannella, scorza di limone e vanillina. Amalgamate, mettete al centro il burro morbido a pezzetti e le uova. Lavorate l'impasto fino ad ottenere una consistenza morbida e liscia. Formate un panetto, avvolgetelo in pellicola e tenete in frigo almeno per un'ora. Stendete 2/3 della pasta e foderate uno stampo a cerniera da 24 cm imburrato. Spalmatevi sopra la confettura e decorate con la pasta rimasta a striscioline. Spennellate con un tuorlo sbattuto e cuocete a 170 gradi per 40 minuti.",nota:"La confettura di lamponi è tradizionale, ma anche albicocche o more sono perfette."},
+  {id:64,cat:"Dolci",nome:"Marquise alla Vaniglia e Cocco",porzioni:"8-10 persone",ingredienti:["150 g di burro", "100 g di zucchero", "250 g di cioccolato bianco", "1 bustina di vanillina", "2 cucchiai di cocco in polvere", "4 uova", "3 cucchiai di liquore alla vaniglia", "200 g di savoiardi", "Latte", "Burro", "Sale", "2,5 dl di crema inglese al caffè", "Riccioli di cioccolato bianco", "Cocco disidratato"],proc:"Lavorate il burro e lo zucchero a crema. Sminuzzate il cioccolato e fatelo fondere a bagnomaria. Incorporate i tuorli alla crema di burro, aggiungete il cocco, la vanillina, lentamente il cioccolato fuso e 2 cucchiai di liquore. Incorporate quindi gli albumi montati a neve finissima con una presa di sale. Impregnate i savoiardi in poco latte profumato col liquore rimasto e con essi foderate il fondo e le pareti di uno stampo a cassetta ben imburrato. Versatevi la crema, livellatela, coprite con pellicola e mettete in frigo per almeno 5 ore. Sformate la Marquise e servitela con la crema inglese tiepida.",nota:"Elegante dolce al cucchiaio perfetto per occasioni speciali."},
+  {id:65,cat:"Dolci",nome:"Mattonella di Ricotta all'Arancia",porzioni:"",ingredienti:["Pan di spagna rettangolare", "500 g di ricotta", "150 g di marmellata d'arance", "2 cucchiai di zucchero a velo", "2 dl di panna", "15 g di gelatina in fogli", "80 g di cioccolato bianco in scaglie", "60 g di granella di nocciole", "Liquore all'arancia", "150 g di scorzette d'arancia candite", "120 g di zucchero a velo", "3 cucchiai di liquore all'arancia"],proc:"Fate ammorbidire la gelatina in acqua fredda, strizzatela e scioglietela in 3 cucchiai di liquore su fuoco basso. Montate densamente la panna. Dividete il pan di spagna in 2 strati e spennellateli con il liquore. Foderate uno stampo a cassetta con carta oleata e disponetevi la base di pan di spagna. Lavorate a crema la ricotta con lo zucchero e la marmellata, incorporate il cioccolato, le nocciole, la gelatina e la panna montata. Versate la crema nello stampo, livellatela e adagiatevi sopra il pan di spagna rimasto. Coprite con pellicola e mettete in frigo per almeno 5 ore. Preparate la glassa sciogliendo lo zucchero con il liquore, spalmatela sul dolce freddo e decorate con i canditi.",nota:""},
+  {id:66,cat:"Dolci",nome:"Mele in Gabbia",porzioni:"",ingredienti:["500 g di pasta sfoglia", "4 mele", "150 g di gelatina di mele cotogne", "1 uovo", "1 cucchiaio di zucchero a velo"],proc:"Sbucciate le mele e privatele del torsolo con l'apposito scavino. Riempite il foro centrale con i 2/3 della gelatina. Stendete la pasta in una sfoglia sottile e dividetela in 4 quadrati di dimensioni adatte a chiudere le mele. Disponete una mela al centro di 4 angoli di pasta intorno al frutto, sigillandolo perfettamente. Spennellate la superficie con l'uovo leggermente sbattuto e cuocete le mele in forno preriscaldato a 210 gradi per circa 30 minuti. Spolverizzate con lo zucchero a velo negli ultimi 5 minuti di cottura. Fate sciogliere la gelatina rimasta con un cucchiaio d'acqua e versatela sulle mele ancora tiepide.",nota:""},
+  {id:67,cat:"Dolci",nome:"Meringata alle Fragole",porzioni:"",ingredienti:["Pan di spagna di 24 cm di diametro", "20 dl di crema pasticciera", "200 g di panna", "4 cucchiai di zucchero a velo", "150 g di fragole", "5 albumi", "250 g di zucchero", "Succo di 1/2 limone", "Essenza di vaniglia"],proc:"Tagliate il pan di spagna in 3 dischi uguali. Montate la panna con la metà dello zucchero a velo, incorporate alla crema pasticciera e aggiungete le fragole. Spalmate la metà del composto su un disco di pan di spagna. Coprite con un secondo disco, proseguite con la crema pasticciera rimasta e terminate col disco di pasta rimasto, premendolo leggermente. Preparate la meringa: montate gli albumi con lo zucchero, unite il succo di limone e 2 gocce di essenza di vaniglia con le fruste elettriche. Stendete la meringa sulla torta, spolverizzatela con lo zucchero a velo rimasto e cuocete in forno preriscaldato a 200 gradi per qualche minuto. Lasciate raffreddare e servite.",nota:""},
+  {id:68,cat:"Dolci",nome:"Millefoglie alle Pere e Cioccolato",porzioni:"",ingredienti:["600 g di pasta sfoglia millefoglie", "600 g di pere", "450 g di zucchero", "500 g di mousse al cioccolato", "4 savoiardi", "50 g di granella di mandorle", "50 g di zucchero a velo"],proc:"Sbucciate le pere, tagliatele a fettine e cuocetele con lo zucchero semolato e 1,5 dl d'acqua, rimescolando, finché saranno quasi caramellate. Stendete la pasta in un rettangolo piuttosto sottile, dividetelo in 3 rettangoli più piccoli, disponeteli sulla placca del forno foderata di carta oleata, punzecchiateli con una forchetta, coprite con un foglio di carta oleata e disponetevi sopra un'altra placca. Cuocete in forno preriscaldato a 200 gradi per circa 25 minuti e lasciate raffreddare le sfoglie su una gratella. Sgocciolate le pere, suddividetele su due rettangoli di pasta e copritele con la mousse. Sovrapponete le 2 sfoglie farcite, adagiatevi sopra la terza sfoglia e spolverizzatela con lo zucchero a velo. Spalmate la mousse tenuta da parte lungo i bordi del dolce e fate aderire la granella di mandorle mescolata ai savoiardi ridotti in polvere. Tenete in frigo fino al momento di servire.",nota:""},
+  {id:69,cat:"Dolci",nome:"Mousse al Cioccolato",porzioni:"",ingredienti:["300 g di cioccolato fondente", "40 g di burro", "2 tuorli", "2 cucchiai di rum", "3 albumi"],proc:"Sminuzzate il cioccolato, trasferitelo in una casseruola, aggiungete 3 cucchiai d'acqua e fatelo fondere a bagnomaria, su fuoco basso e sempre mescolando, finché otterrete una crema ben densa e omogenea. Togliete la casseruola dal fuoco e, sempre mescolando, incorporate il burro. Quindi incorporate i tuorli e il rum. In una grande ciotola montate a neve ben densa gli albumi e incorporateli, poca alla volta, alla crema di cioccolato mescolando dal basso verso l'alto con una spatola. Mettete la mousse in frigo per 2-3 ore e servitela decorata a piacere.",nota:""},
+  {id:70,cat:"Dolci",nome:"Pan Brioche",porzioni:"",ingredienti:["500 g di farina", "3 uova", "3 cucchiai di zucchero", "3 cucchiai di olio", "1 lievito", "1 patata bollita schiacciata", "1 pizzico di sale"],proc:"Formare le 4 palle e tenere a lievitare 4 ore. Stenderle e riempirle con crema, prosciutto e sottilette, chiudere, tenere a lievitare ancora 1 ora.",nota:"Ottimo sia nella versione dolce che salata."},
+  {id:71,cat:"Dolci",nome:"Pandoro all'Arancia",porzioni:"",ingredienti:["1 pandoro", "3 tuorli", "10 cucchiai di zucchero", "2 cucchiai di amido di mais", "5 dl di latte", "Grand Marnier", "4 arance", "Foglioline di limoncella"],proc:"Sbattete i tuorli con 4 cucchiai di zucchero, incorporate l'amido di mais e il latte versato a filo. Aggiungete il succo di 3 arance e la scorza prelevata da una di queste e fate addensare il composto su fuoco lento, mescolando in continuazione. Versate la crema in una ciotola, copritela con pellicola e lasciatela raffreddare. In un tegamino mettete lo zucchero rimasto, 2 dl di acqua e preparate uno sciroppo, unite le fette d'arancia e fatele cuocere per pochi minuti. Dividete il pandoro a fette orizzontali alte 2 cm circa e bagnatele con il Grand Marnier. Mettete la base su un piatto da portata, ricoprite con uno strato di crema, mettete un altro strato di pandoro e procedete come indicato fino a esaurimento degli ingredienti. Decorate con le fettine d'arancia candite e le foglioline di limoncella.",nota:""},
+  {id:72,cat:"Dolci",nome:"Pastiera Napoletana",porzioni:"",ingredienti:["450 g di pasta frolla", "1/2 scatola di grano lessato", "15 g di burro", "250 g di ricotta", "100 g di zucchero", "3 tuorli", "2 albumi", "2,5 dl di latte", "20 g di acqua di fiori d'arancio", "40 g di canditi", "Un pizzico di cannella", "1/2 limone", "Zucchero a velo"],proc:"Fate cuocere il grano con il burro e il latte finché risulterà cremoso. Lavorate la ricotta con lo zucchero, i tuorli, i canditi, la cannella, l'acqua di fiori d'arancio, il grano, la scorza del limone grattugiata, poi incorporate gli albumi montati a neve. Dividete la pasta frolla in due parti, di cui una più grande. Stendere la parte più grande in una sfoglia sottile e con essa foderate una teglia da 22 cm di diametro. Riempite con il ripieno preparato e adagiatevi sopra delle striscioline di pasta ricavate dalla sfoglia rimasta, sigillandole ai bordi. Cuocete la pastiera in forno preriscaldato a 180 gradi per un'ora e mezzo. Servitela fredda, spolverizzata di zucchero a velo.",nota:""},
+  {id:73,cat:"Dolci",nome:"Perfetto al Caffè",porzioni:"",ingredienti:["300 g di panna", "4 tuorli", "150 g di zucchero a velo", "1/2 tazzina di caffè fondente"],proc:"Riunite in una ciotola i tuorli e lo zucchero e, con le fruste, sbatteteli finché otterrete un composto chiaro e spumoso. Incorporatevi il caffè e, a poco alla volta, la panna montata molto densamente. Trasferite il composto in uno stampo da plum-cake e mettete in freezer per 3 ore. Immergete per qualche istante il fondo dello stampo in acqua calda, sformate e servite.",nota:""},
+  {id:74,cat:"Dolci",nome:"Pie di Mele all'Americana",porzioni:"",ingredienti:["Pasta brisé", "1 kg di mele", "150 g di zucchero", "Una grattata di noce moscata", "Farina", "Cannella in polvere", "Scorza di limone grattugiata", "30 g di burro", "400 g di gelato alla vaniglia"],proc:"Sbucciate le mele e tagliatele a cubetti. Mescolateli con lo zucchero, la noce moscata, una presa di cannella, la scorza di limone e un cucchiaio di farina. Stendete la pasta in 2 dischi di cui uno più grande e con esso foderate uno stampo a cerniera di 25 cm di diametro, imburrato ed infarinato. Bucherellate il fondo con una forchetta, versatevi le mele, coprite con un secondo disco di pasta e sigillate i bordi. Fate cuocere in forno preriscaldato a 200 gradi per 45 minuti. Sformate e lasciate intiepidire. Servite la torta fredda o tiepida, accompagnata con il gelato spolverizzato di cannella.",nota:""},
+  {id:75,cat:"Dolci",nome:"Plum Cakes",porzioni:"",ingredienti:["150 g di burro a temperatura ambiente", "200 g di zucchero", "4 uova", "2 fialette di aroma al limone (o buccia grattugiata)", "100 g di amido di frumento", "300 g di farina", "100 ml di latte", "1 busta Pane degli Angeli", "100 g di macedonia candita"],proc:"Lavorare il burro a crema con lo zucchero, le uova e l'aroma. Aggiungere il sale. Impastare la farina alternandovi il latte e l'amido ed aggiungete Pane degli Angeli. Unite i canditi. Mettete l'impasto in uno stampo a cassetta foderato con la carta da forno e cuocete, nella parte inferiore del forno preriscaldato a 180 gradi, per 55-60 minuti.",nota:""},
+  {id:76,cat:"Dolci",nome:"Profiteroles",porzioni:"",ingredienti:["Bignè", "7 dl di panna", "3 dl di latte caldo", "70 g di cioccolato fondente", "30 g di farina", "5 tuorli", "100 g di zucchero", "1/2 limone"],proc:"Portare ad ebollizione il latte con 2 dl di panna e la scorza di limone. Lavorate i tuorli con lo zucchero finché saranno schiumosi, aggiungete la farina setacciata e il latte caldo versato a filo. Portate a ebollizione il composto e cuocetelo per qualche minuto, mescolando continuamente. Aggiungete quindi, lontano dal fuoco, il cioccolato tritato e mescolate finché si sarà sciolto. Montate la panna rimasta, mettetela in una tasca da pasticciere e farcite i bignè. Disponete su un piatto da portata uno strato di bignè, versatevi sopra uniformemente un po' di crema al cioccolato, disponete altri bignè e copriteli con la crema. Proseguite formando una piramide, fino ad esaurimento degli ingredienti e decorate con ciuffi di panna.",nota:""},
+  {id:77,cat:"Dolci",nome:"Rotolo di Natale",porzioni:"",ingredienti:["Pasta biscuit", "5 dl di panna", "4 cucchiai di marron glacé a pezzi", "4 cucchiai di crema di marroni", "2 cucchiaini di rum", "150 g di cioccolato fondente", "2 cucchiai di cacao"],proc:"Preparate la pasta biscuit, sfornatela, bagnatela col rum e ricavate una striscia larga 5 cm, poi arrotolatela. Montate 3 dl di panna, aggiungete la crema di marroni e i marron glacé. Farcite la pasta biscuit con la crema preparata e arrotolatela, farcite anche la striscia e arrotolate anch'essa. Mescolate la panna rimasta con il cioccolato fuso e spalmate il composto sui rotoli, disposti sul piatto da portata in modo da sembrare un tronco. Rigate la superficie della copertura con una forchetta, quando inizia a solidificarsi, decorate a piacere e cospargete di cacao prima di servire.",nota:"Un classico del Natale, elegante e scenografico."},
+  {id:78,cat:"Dolci",nome:"Sacher Torte",porzioni:"",ingredienti:["150 g di farina", "150 g di burro", "150 g di zucchero", "5 uova", "300 g di cioccolato fondente", "1 cucchiaino di Pane degli Angeli", "1 bustina di vanillina", "150 g di confettura di albicocche", "2 cucchiai di latte", "100 g di zucchero a velo"],proc:"Lavorate il burro morbido con lo zucchero e la vanillina. Incorporate, uno alla volta, i tuorli, e unite la metà del cioccolato fondente, prima sciolto a bagnomaria con il latte. Montate a neve ben ferma gli albumi, incorporatevi la farina con il lievito e unite il tutto alla crema di burro e cioccolato. Versate il composto in uno stampo del diametro di 24 cm, imburrato ed infarinato, e fate cuocere in forno preriscaldato a 180 gradi per 40 minuti circa. Sformate la torta, lasciatela raffreddare, tagliatela orizzontalmente e farcitela con uno strato di confettura di albicocche. Sciogliete il cioccolato rimasto a bagnomaria con lo zucchero a velo e 2 cucchiai d'acqua e rivestite la torta con la glassa ottenuta.",nota:""},
+  {id:79,cat:"Dolci",nome:"Saint Honoré",porzioni:"",ingredienti:["200 g di pasta sfoglia millefoglie", "8 bignè", "2 dischi di pan di spagna", "7 dl di panna", "5 tuorli", "230 g di zucchero", "1/2 l di latte", "60 g di farina", "1/2 bustina di vanillina", "1 scorza grattugiata di limone", "40 g di cacao", "2 cucchiaini di marsala", "1 cucchiaino di rum"],proc:"Dalla sfoglia ricavate un disco di 24 cm di diametro, disponetelo sulla placca del forno rivestita con un foglio di carta oleata, bucherellatelo e cuocetelo in forno preriscaldato a 220 gradi per 15 minuti. Portate ad ebollizione il latte con la scorza di limone. In una casseruola sbattete i tuorli con 200 g di zucchero e la farina e la vanillina, versate il latte caldo mescolando energicamente e fate cuocere a fuoco basso per 7-8 minuti. Aggiungete il marsala, suddividete la crema in due ciotole e a una aggiungete il cacao, poi lasciate raffreddare. Montate 5 dl di panna, suddividetela in uguale misura nelle due creme e mettete in frigo. Fate bollire per 2 minuti 1 dl d'acqua con 30 g di zucchero e le scorzette di limone, filtrate, fate raffreddare e aggiungete il rum. Riempite, con una siringa da pasticcere, 4 bignè con crema bianca e 4 con quella al cacao. Inzuppate il pan di spagna nello sciroppo al rum. Adagiate il primo disco sul fondo di sfoglia, spalmatelo con la crema bianca, coprite con il secondo disco e spalmate quello al cacao. Montate la panna rimasta e rivestite i bordi della torta. Passate i bignè nel caramello e posateli sulla torta.",nota:""},
+  {id:80,cat:"Dolci",nome:"Savarin alla Frutta",porzioni:"",ingredienti:["250 g di farina", "80 g di burro", "300 g di zucchero", "15 g di lievito di birra", "4 uova", "1 scorza grattugiata di limone", "3 cucchiai di latte", "1 dl di rum", "250 g di banane già sbucciate", "1,5 dl di panna", "5 g di gelatina ammollata in acqua fredda", "300 g di frutta mista di stagione"],proc:"Lavorate la farina con il lievito sciolto nel latte tiepido, il burro, 200 g di zucchero, una presa di sale, la scorza di limone e le uova, finché otterrete un impasto sodo ed elastico. Lasciatelo lievitare, coperto e in luogo tiepido, fino a quando avrà raddoppiato il suo volume. Mettete il panetto in uno stampo a ciambella, imburrato ed infarinato, e lasciatelo lievitare ancora finché raggiungerà il bordo dello stampo, poi cuocete in forno preriscaldato a 190 gradi per 40 minuti circa. Preparate lo sciroppo facendo bollire 2 dl di acqua con lo zucchero rimasto, aggiungete il rum e versatelo sul dolce sformato. Frullate le banane con la gelatina sciolta in 2 cucchiai di sciroppo caldo, unite la panna montata e versate il composto al centro del savarin. Decorate con la frutta mista.",nota:""},
+  {id:81,cat:"Dolci",nome:"Scarpaccia Viareggina",porzioni:"",ingredienti:["3 piccole zucchine", "120 g di zucchero", "120 g di olio", "150 g di farina", "1 uovo", "120 g di latte", "Scorza di 1 limone", "100 g di ricotta", "4 foglie di basilico", "1 pizzico di sale", "1/2 bustina di lievito", "60 g di pangrattato"],proc:"Tritare le zucchine, non troppo fini, e metterle in una ciotola. A parte in un'altra ciotola introdurre lo zucchero, la scorza di limone e tutti gli altri ingredienti tranne le zucchine. Versare l'impasto in una teglia tonda, imburrata e cosparsa di pangrattato, disporre sopra le zucchine. Cuocete in forno a 180 gradi per 30 minuti. Servitela fredda.",nota:"Un dolce tipico della tradizione toscana."},
+  {id:82,cat:"Dolci",nome:"Schiacciata alla Fiorentina",porzioni:"",ingredienti:["120 g di zucchero", "Scorzetta di 1 limone", "2 uova", "60 g di olio", "150 g di farina", "60 g di latte", "1 Pane degli Angeli", "60 g di pangrattato", "1 pizzico di sale"],proc:"Lavorare tutti gli ingredienti tranne il lievito, unitelo per ultimo. Versate il composto in una teglia rettangolare imburrata e cosparsa di pane grattato. Cuocete in forno caldo a 180 gradi per 20 minuti. Servitela cosparsa di zucchero a velo.",nota:"Dolce tipico carnevalesco fiorentino."},
+  {id:83,cat:"Dolci",nome:"Semifreddo alle Noci e Miele",porzioni:"",ingredienti:["100 g di noci sgusciate e spellate", "150 g di miele", "5 tuorli", "5 dl di panna"],proc:"Montate a spuma i tuorli con le fruste elettriche, aggiungete il miele e le noci polverizzate (tenetene qualcuna intera) e incorporate la panna montata densamente. Versate la crema in uno stampo rettangolare scanalato, copritelo con la pellicola per alimenti e mettete in freezer per almeno 2 ore. Servite il semifreddo decorato con le noci tenute da parte.",nota:""},
+  {id:84,cat:"Dolci",nome:"Soufflé al Caffè",porzioni:"",ingredienti:["5 uova", "50 g di fecola", "1,5 dl di latte", "1 dl di caffè fondente", "100 g di zucchero", "2 cucchiaini di liquore al caffè", "10 g di burro"],proc:"Mettete in una casseruola la fecola, diluitela con il latte e il caffè versati a filo, incorporate lo zucchero e cuocete su fuoco basso, sempre mescolando, finché il composto si sarà addensato. Aggiungete, mescolando al composto, il liquore ed i tuorli, lasciate raffreddare e unite gli albumi montati a neve. Trasferite il composto in uno stampo da soufflé, imburrato, cuocete in forno preriscaldato a 200 gradi per circa 35 minuti.",nota:"Da servire subito, appena uscito dal forno."},
+  {id:85,cat:"Dolci",nome:"Sponge Cake",porzioni:"",ingredienti:["375 g di farina", "250 g scarsi di zucchero", "8 uova (se grandi 7)", "110 ml di olio di semi", "175 ml di acqua", "Mezza bustina di cremor tartaro", "1 bustina di Pane degli Angeli", "1 vanillina", "Buccia di 3 limoni grattugiati (o arancia)"],proc:"Montare gli albumi a neve soda con il cremor tartaro e mettere da parte. A parte montare i tuorli con lo zucchero. Quando saranno gonfi aggiungere la farina, l'olio, l'acqua, il Pane degli Angeli e l'aroma che si vuole. Mischiare il tutto con movimento dall'alto verso il basso. Aggiungere delicatamente gli albumi montati. Versare il composto nello stampo unto con olio di semi e infornare a 170-180 gradi per 50 minuti circa. Quando è cotto farlo raffreddare rovesciato sulle bottiglie. Una volta freddo aiutarci con una spatola e staccarlo dalle pareti.",nota:"Spolverizzare con zucchero a velo. Quando si capovolge tende a cadere, fare attenzione."},
+  {id:86,cat:"Dolci",nome:"Strudel di Mele",porzioni:"",ingredienti:["Pasta da strudel", "1 kg di mele", "120 g di zucchero", "240 g di pangrattato", "Scorza gialla di 1/2 limone", "50 g di pinoli", "50 g di noci", "1/2 cucchiaino di cannella in polvere", "1 tuorlo", "50 g di burro", "Zucchero a velo"],proc:"Preparare l'impasto e lasciatelo riposare per 1/2 ora coperto. Tritate le mele sbucciate. Versatele in una terrina e mescolatele con lo zucchero, la cannella, pinoli, noci, limone e pangrattato. Stendete la pasta, molto sottile, sopra un canovaccio ben pulito ed infarinato. Spennellare la pasta con il burro liquefatto e ricoprire con il ripieno, lasciando libero il bordo di 3 cm ai lati. Servendosi del canovaccio arrotolate lo strudel su se stesso, chiudendo bene le estremità. Comprimere i bordi e disponetelo sulla piastra del forno imburrata e spennellatelo con il tuorlo d'uovo. Dare la forma di ferro di cavallo. Cuocete in forno caldo a 180 gradi per 10 minuti ed a 200 gradi per altri 30 minuti. Servitelo cosparso di zucchero a velo.",nota:""},
+  {id:87,cat:"Dolci",nome:"Tartarelle alla Crema di Caffè",porzioni:"12 tartellette",ingredienti:["12 forme di cestini con pasta frolla", "2 tuorli", "50 g di zucchero", "25 g di farina", "1 dl di caffè", "1,5 dl di latte", "1 scorzetta di limone", "4 savoiardi", "1 tazzina di caffè fondente", "2 chiodi di garofano", "Cannella in polvere"],proc:"Mettete i tuorli in una casseruolina con 50 g di zucchero e lavorateli con le fruste finché otterrete un composto chiaro e spumoso. Incorporatevi la farina, unite il latte poco alla volta, 1 dl di caffè e la scorza di limone. Mettete la crema su fuoco lentissimo, portate ad ebollizione, mescolando, e cuocete per 6-7 minuti. Riunite in una ciotola i chiodi di garofano, una presa di cannella, un cucchiaino di zucchero, un bicchierino di cognac scaldato a fuoco basso e la tazzina di caffè fondente: mescolate e inzuppate i savoiardi divisi in 3 parti nel misto ottenuto. Distribuite nelle tartellette e riempitele con la crema pasticciera fatta scendere da una tasca per i dolci con bocchetta a stella. Tenete le tartellette in frigo fino al momento di servire.",nota:""},
+  {id:88,cat:"Dolci",nome:"Tartufi al Rhum",porzioni:"",ingredienti:["150 g di cioccolato fondente", "75 g di burro morbido", "60 g di zucchero", "50 g di Pavesini", "2 cucchiai di rhum", "30 g di cacao amaro"],proc:"Sbriciolate i biscotti e metteteli in una ciotola. Grattugiate il cioccolato, unite il burro e lo zucchero. Aggiungete ai biscotti il composto e il rhum, mettete in una ciotola e lasciatelo in frigo per almeno mezz'ora. Formate le palline, passatele nel cacao in polvere e sistematele nei pirottini di carta.",nota:"Facili e golosi, ottimi come regalo fatto in casa."},
+  {id:89,cat:"Dolci",nome:"Torta alle Noci",porzioni:"",ingredienti:["300 g di noci", "360 g di zucchero", "4 uova", "1 bustina di vanillina", "1 pizzico di sale"],proc:"Tritate le noci ed unirvi lo zucchero, aggiungere i tuorli, sale e vanillina. A parte, montare i bianchi a neve ed incorporateli al resto del composto. Ricoprire con una carta oleata una tortiera tonda e versare il composto. Cuocete in forno caldo a 180 gradi per 20 minuti circa.",nota:""},
+  {id:90,cat:"Dolci",nome:"Torta con Crema al Caffè",porzioni:"",ingredienti:["5 uova", "150 g di zucchero", "200 g di farina", "1 tazzina da tè di caffè fondente", "400 g di panna"],proc:"Riunite in una ciotola 3 tuorli con 100 g di zucchero e, con le fruste, sbatteteli finché otterrete una crema chiara che sarà raddoppiata di volume. Incorporatevi prima 3 albumi montati a neve, poi 200 g di farina. Trasferite il composto in uno stampo a cerniera di 24 cm di diametro, imburrato e cuocete la torta in forno preriscaldato a 180 gradi per 40 minuti. Nel frattempo riunite in una ciotola 2 tuorli e 50 g di zucchero e, con le fruste, sbatteteli finché otterrete un composto chiaro. Incorporatevi un cucchiaio di farina ed il caffè: versate la crema in una piccola ciotola, mettetela a fuoco basso e, mescolando spesso, portate ad ebollizione. Lasciate raffreddare la crema ed incorporatevi la panna montata molto densamente. Sfornate la torta, sformatela, fatela raffreddare, tagliatela a metà orizzontalmente e farcitela con la metà della crema, poi ricomponete la torta e ricopritela con la crema rimasta e decorate a piacere.",nota:""},
+  {id:91,cat:"Dolci",nome:"Torta di Mele",porzioni:"",ingredienti:["300 g di farina", "200 g di zucchero", "30 g di burro o olio", "500 g di mele", "3 uova", "Pane degli Angeli"],proc:"Mescolare le uova con lo zucchero fino a ottenere un composto spumoso. Aggiungere il burro o olio, la farina setacciata con il lievito, le mele sbucciate e tagliate a cubetti. Versare in uno stampo imburrato e cuocere in forno a 180 gradi per circa 40 minuti.",nota:""},
+  {id:92,cat:"Dolci",nome:"Torta di Nocciole",porzioni:"",ingredienti:["200 g di nocciole", "250 g di farina", "280 g di zucchero", "5 uova", "80 g di burro morbido", "1 Pane degli Angeli", "180 ml di latte"],proc:"Tritate le nocciole fine e mettetele in una ciotola. Amalgamare tutti gli ingredienti, alla fine le nocciole ed il lievito. Versare il composto in una tortiera, unta ed infarinata. Cuocere a 180 gradi per 30 minuti. Usare il tegame medio tondo.",nota:""},
+  {id:93,cat:"Dolci",nome:"Torta di Ricotta",porzioni:"",ingredienti:["300 g di farina", "1 bicchiere di olio", "1 pizzico di sale", "Vino bianco caldo per impastare", "1 fuscello di ricotta", "2 uova", "150-200 g di zucchero", "Scorza di limone"],proc:"Impastare la farina con l'olio, il sale e vino bianco caldo quanto basta per ottenere un impasto liscio. Lasciar riposare. Per il ripieno: mescolare la ricotta con le uova, lo zucchero e la scorza di limone fino a crema omogenea. Stendere la pasta in una tortiera, versare il ripieno e cuocere in forno a 180 gradi per circa 35-40 minuti.",nota:"La pasta impastata con il vino bianco è particolarmente friabile e profumata."},
+  {id:94,cat:"Dolci",nome:"Torta di Riso",porzioni:"",ingredienti:["1/2 l di latte", "3 uova", "150 g di riso", "100 g di zucchero", "80 g di burro", "50 g di cioccolato fondente", "3 cucchiai di zucchero a velo", "10 ml di rum", "30 g di scorzette d'arancia candita"],proc:"Cuocete il riso nel latte per 30 minuti e frullatelo finché otterrete un composto omogeneo: fatelo raffreddare e unite i tuorli, il burro, lo zucchero, l'arancia ed il cioccolato tritato grossolanamente. Infine incorporate delicatamente gli albumi montati a neve con una presa di sale. Versate il composto in uno stampo di 22 cm di diametro e cuocete in forno preriscaldato a 170 gradi per 40 minuti circa. Servite la torta fredda, cosparsa di zucchero a velo.",nota:""},
+  {id:95,cat:"Dolci",nome:"Torta di Rose",porzioni:"",ingredienti:["300 g di farina", "3 tuorli", "3 cucchiai di olio", "1 cucchiaio di zucchero", "180 ml di latte", "25 g di lievito di birra", "Scorza di 1 limone", "150 g di burro morbido", "180 g di zucchero"],proc:"Mettere in una terrina 1 cucchiaio di zucchero e la scorza di limone, aggiungere il latte in cui sarà stato fatto sciogliere il lievito, i tuorli, l'olio e versate la farina a pioggia. Versate l'impasto sul tavolo infarinato e tirare una sfoglia sottile rettangolare. A parte mettete il burro ed il zucchero, spennellare con questo composto tutta la pasta. Arrotolatela su se stessa e tagliare tanti rocchetti di 4 cm. Stringeteli da un lato, chiudeteli bene e sistemateli in una teglia unta ed infarinata di 26 cm di diametro, disponendoli distanziati fra loro. Far lievitare e cuocere in forno a 180 gradi per circa 30 minuti.",nota:""},
+  {id:96,cat:"Dolci",nome:"Torta Diplomatica",porzioni:"",ingredienti:["Pan di spagna rettangolare 20x20", "400 g di sfoglia", "200 g di burro", "200 g di zucchero", "5 tuorli", "1 albume", "4 cucchiai di rum", "4 cucchiai di maraschino", "1 bustina di vanillina", "100 g di gelatina di albicocche", "5 cucchiai di zucchero a velo"],proc:"Lavorate il burro morbido con lo zucchero finché otterrete una crema soffice: incorporatevi i tuorli uno alla volta, la vanillina, infine l'albume montato a neve ben ferma con un pizzico di sale e il rum. Private il pan di spagna della crosta. Fate sciogliere la gelatina di albicocche in un tegamino a fuoco basso. Adagiate il rettangolo di sfoglia su un piatto da portata, spennellatelo con la gelatina e distribuite sopra uno strato di crema. Coprite con il pan di spagna, inzuppatelo con il maraschino e fate uno strato di crema. Spennellate il rettangolo di sfoglia rimasto con la gelatina e appoggiatelo sulla torta.",nota:""},
+  {id:97,cat:"Dolci",nome:"Torta Gran Paradiso",porzioni:"",ingredienti:["200 g di farina", "150 g di zucchero", "4 uova", "1/2 bicchiere di latte", "100 g di burro", "1 limone grattugiato", "Pane degli Angeli", "1/4 l di panna"],proc:"Montare il burro morbido con lo zucchero, aggiungere le uova una alla volta, poi la farina setacciata con il lievito, il latte e il limone grattugiato. Versare in uno stampo imburrato e cuocere in forno a 180 gradi per circa 35-40 minuti. Servire con panna montata.",nota:""},
+  {id:98,cat:"Dolci",nome:"Zeppole",porzioni:"",ingredienti:["250 g di patate bollite fredde", "250 g di farina", "2 uova", "1 lievito di birra (dal quale togliere un po')", "1 pizzico di sale", "Limone grattugiato"],proc:"Schiacciare le patate bollite e fredde. Impastare con la farina, le uova, il lievito sciolto in poca acqua tiepida, il sale e il limone grattugiato. Lasciare crescere per 1 ora. Formare le zeppole e friggerle in olio caldo. Scolare e servire calde con zucchero a velo.",nota:"Friggere in olio ben caldo per ottenere zeppole dorate e leggere."},
+  {id:99,cat:"Liquori",nome:"Liquore al Limone",porzioni:"5 litri",ingredienti:["1 l di alcool", "50-60 limoni verdi con foglie", "1 l di acqua", "800 g di zucchero"],proc:"Infilare le bucce dei limoni nel bottiglione dell'alcool e tenerle per 1 giorno e 1/2. Far ben intiepidire l'acqua con lo zucchero, procurarsi un bottiglione da 5 l ed iniziare a mescolare lo spirito filtrato con un fazzoletto bianco e l'acqua tiepida. Aspettare che il tutto si raffreddi e mettere nelle bottiglie.",nota:"Conservare in freezer e servire ghiacciato."},
+  {id:100,cat:"Liquori",nome:"Liquore al Melograno",porzioni:"",ingredienti:["2 melograne grandi", "500 g di alcool", "3 chiodi di garofano", "La buccia di 1 limone", "1 stecca di cannella", "375 g di zucchero", "500 ml di acqua"],proc:"Infilare i grani in un vaso con l'alcool, la cannella, il limone e i chiodi di garofano. Lasciar macerare per 7-10 giorni. Dopodiché far sciogliere lo zucchero in acqua, lasciar raffreddare ed unire al liquido filtrato con un colino e imbottigliare.",nota:"Il colore rubino è spettacolare. Ottimo servito freddo come digestivo."},
+  {id:101,cat:"Liquori",nome:"Liquore di Cioccolato",porzioni:"",ingredienti:["2 bustine di vanillina", "800 g di zucchero", "2 scatole di cacao amaro", "1 l di latte intero", "200 g di alcool"],proc:"Unite zucchero e cacao amaro in una pentola e amalgamarli finché spariscono i grumi. Dopodiché aggiungere pian piano il latte, accendere il gas e rigirare finché non bolle il tutto. Quando ciò avviene, bollirlo ancora per 5 minuti. Far raffreddare il composto, aggiungere le bustine di vanillina e l'alcool.",nota:"Servire freddo. Si conserva in frigo per alcune settimane."},
+  {id:102,cat:"Antipasti",nome:"Crocchette d'Uova con Piselli e Carotine",porzioni:"6 persone",ingredienti:["100 g di farina", "60 g di burro", "60 g di emmental grattugiato", "5 uova", "1 tuorlo", "300 g di piselli surgelati", "2 carotine", "Pangrattato, olio, sale"],proc:"Rassodare 3 uova cuocendole per 8 minuti dall'ebollizione. Raffreddarle sotto l'acqua corrente e sgusciarle. Lessare separatamente i piselli e le carotine tritate grossolanamente. Preparate una besciamella molto densa: fate fondere il burro, aggiungete 60 g di farina; cuocete il latte aggiungendo di tanto in tanto il formaggio tritato. Lasciate intiepidire, poi aggiungete il tuorlo. Incorporate le verdure alla salsa. Formate le crocchette, passatele nelle uova rimaste sbattute e nel pangrattato. Friggete.",nota:"Le crocchette possono essere preparate in anticipo e conservate in frigo fino alla frittura."},
+  {id:103,cat:"Dolci",nome:"Plum-Cake al Cioccolato e Nocciole",porzioni:"",ingredienti:["120 g di farina", "100 g di burro", "125 g di zucchero a velo", "80 g di nocciole tostate", "Cioccolato fondente", "15 g di cacao", "2 cucchiai di miele", "1 cucchiaio di rum", "3 tuorli", "2 albumi", "1 cucchiaino di lievito Pane degli Angeli"],proc:"Montate lo zucchero con il burro morbido, unite i tuorli e la farina con il lievito e il cacao. Aggiungete il cioccolato a scaglie, le nocciole tritate, il rum e il miele. Incorporate delicatamente al composto gli albumi montati a neve con un pizzico di sale, e versate il composto in uno stampo da plum-cake imburrato ed infarinato. Cuocete in forno preriscaldato a 190 gradi per 25-30 minuti, coprendo il dolce a metà cottura con un foglio d'alluminio. Poi sformatelo e lasciatelo raffreddare.",nota:""},
+  {id:104,cat:"Dolci",nome:"Sbrisolona con Fragole e Mascarpone",porzioni:"",ingredienti:["400 g di farina", "70 g di zucchero di canna", "70 g di zucchero semolato", "120 g di burro", "2 uova", "Lievito Pane degli Angeli", "1/2 limone grattugiato", "500 g di mascarpone (crema)", "2 tuorli (crema)", "120 g di zucchero (crema)", "1 cucchiaino di vaniglia (crema)", "Confettura di fragole", "300 g di fragole"],proc:"Mescolare la farina con gli zuccheri, il burro a pezzetti, le uova, il lievito e il limone grattugiato. Lavorare fino ad ottenere un composto sbriciolato. Disporre metà del composto in una tortiera imburrata, distribuire sopra la crema di mascarpone (preparata mescolando mascarpone, tuorli, zucchero e vaniglia), qualche cucchiaio di confettura di fragole e le fragole a pezzetti. Coprire con il resto del composto sbriciolato. Cuocere in forno a 180 gradi per circa 35-40 minuti.",nota:""},
+];
+
+const CATEGORIE_DEFAULT = [
+  { nome:"Antipasti", emoji:"🍢", colore:"#e8762a" },
+  { nome:"Salato", emoji:"🍕", colore:"#c0392b" },
+  { nome:"Creme & Basi", emoji:"🧁", colore:"#8e44ad" },
+  { nome:"Dolci", emoji:"🍰", colore:"#d4507a" },
+  { nome:"Liquori", emoji:"🍋", colore:"#d4a017" }
+];
+
+// ==================== STATO ====================
+let ricette = [];
+let categorie = [];
+let catSelezionata = "Tutte";
+let ricettaAttiva = null;
+let modalitaModifica = false;
+let ocrDatiRicetta = null;
+let nextId = 100;
+let viewAttiva = 'lista';
+
+// Lista della spesa
+let spesa = []; // [{id, nome, completato, ts}]
+let notificheAbilitate = false;
+let notifSoloProdotti = true;
+let notifFreqMinuti = 720;
+let notifIntervalId = null;
+
+// ==================== STORAGE LOCALE ====================
+function salvaStorage() {
+  try {
+    localStorage.setItem('ricettario_ricette', JSON.stringify(ricette));
+    localStorage.setItem('ricettario_categorie', JSON.stringify(categorie));
+    localStorage.setItem('ricettario_nextid', nextId);
+  } catch(e) {}
+}
+
+function salvaStorageSpesa() {
+  try {
+    localStorage.setItem('ricettario_spesa', JSON.stringify(spesa));
+  } catch(e) {}
+}
+
+function salvaStorageNotif() {
+  try {
+    localStorage.setItem('ricettario_notif', JSON.stringify({
+      abilitato: notificheAbilitate,
+      soloProdotti: notifSoloProdotti,
+      freqMinuti: notifFreqMinuti
+    }));
+  } catch(e) {}
+}
+
+function caricaStorage() {
+  try {
+    const r = localStorage.getItem('ricettario_ricette');
+    const c = localStorage.getItem('ricettario_categorie');
+    const n = localStorage.getItem('ricettario_nextid');
+    ricette = r ? JSON.parse(r) : JSON.parse(JSON.stringify(RICETTE_DEFAULT));
+    categorie = c ? JSON.parse(c) : JSON.parse(JSON.stringify(CATEGORIE_DEFAULT));
+    const idVisti = new Set();
+    let counterFix = 100000;
+    ricette.forEach(ricetta => {
+      if (ricetta.id === undefined || ricetta.id === null || idVisti.has(ricetta.id)) {
+        ricetta.id = counterFix++;
+      }
+      idVisti.add(ricetta.id);
+    });
+    const maxId = ricette.reduce((max, rx) => Math.max(max, rx.id || 0), 0);
+    nextId = Math.max(n ? parseInt(n) : 0, maxId + 1);
+    salvaStorage();
+  } catch(e) {
+    ricette = JSON.parse(JSON.stringify(RICETTE_DEFAULT));
+    categorie = JSON.parse(JSON.stringify(CATEGORIE_DEFAULT));
+    nextId = ricette.reduce((max, rx) => Math.max(max, rx.id || 0), 0) + 1;
+  }
+
+  // Carica spesa locale
+  try {
+    const s = localStorage.getItem('ricettario_spesa');
+    spesa = s ? JSON.parse(s) : [];
+  } catch(e) { spesa = []; }
+
+  // Carica impostazioni notifiche
+  try {
+    const notifData = localStorage.getItem('ricettario_notif');
+    if (notifData) {
+      const d = JSON.parse(notifData);
+      notificheAbilitate = d.abilitato || false;
+      notifSoloProdotti = d.soloProdotti !== false;
+      notifFreqMinuti = d.freqMinuti || 720;
+    }
+  } catch(e) {}
+}
+
+// ==================== FIREBASE SYNC ====================
+let fbRicetteRef = null;
+let fbSpesaRef = null;
+let fbSyncAbilitato = false;
+
+function inizializzaFirebase() {
+  if (!window._firebase || !window._firebase.abilitato()) {
+    aggiornaIndicatorSync('offline', 'locale');
+    document.getElementById('firebase-warn').style.display = 'block';
+    return;
+  }
+
+  fbSyncAbilitato = true;
+  const { db, ref, onValue, set } = window._firebase;
+
+  // Sync ricette
+  fbRicetteRef = ref(db, 'ricettario/ricette');
+  onValue(fbRicetteRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      ricette = Object.values(data);
+      const maxId = ricette.reduce((max, rx) => Math.max(max, rx.id || 0), 0);
+      nextId = Math.max(nextId, maxId + 1);
+      salvaStorage();
+      aggiornaChips();
+      aggiornalista();
+    }
+    aggiornaIndicatorSync('online', 'sincronizzato');
+  });
+
+  // Sync categorie
+  const fbCatRef = ref(db, 'ricettario/categorie');
+  onValue(fbCatRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      categorie = Object.values(data);
+      salvaStorage();
+      aggiornaChips();
+    }
+  });
+
+  // Sync spesa
+  fbSpesaRef = ref(db, 'ricettario/spesa');
+  onValue(fbSpesaRef, (snapshot) => {
+    const data = snapshot.val();
+    spesa = data ? Object.values(data) : [];
+    // Migra eventuali ID con caratteri vietati da Firebase (es. punti da vecchi salvataggi)
+    let idCorrotti = false;
+    spesa = spesa.map(p => {
+      const idSano = String(p.id).replace(/[\.#$\/\[\]]/g, '_');
+      if (idSano !== String(p.id)) { idCorrotti = true; return Object.assign({}, p, { id: idSano }); }
+      return p;
+    });
+    if (idCorrotti) sincronizzaSpesa(); // riscrivi su Firebase con ID puliti
+    salvaStorageSpesa();
+    aggiornaListaSpesa();
+    aggiornaBadgeSpesa();
+    aggiornaIndicatorSyncSpesa('online', 'sincronizzato');
+  });
+
+  aggiornaIndicatorSync('online', 'connesso');
+  aggiornaIndicatorSyncSpesa('online', 'connesso');
+  document.getElementById('firebase-warn').style.display = 'none';
+}
+
+function sincronizzaRicette() {
+  if (!fbSyncAbilitato || !window._firebase || !window._firebase.abilitato()) {
+    aggiornaIndicatorSync('offline', 'locale');
+    return;
+  }
+  aggiornaIndicatorSync('syncing', 'salvataggio...');
+  const { db, ref, set } = window._firebase;
+  const obj = {};
+  ricette.forEach(r => { obj['r' + r.id] = r; });
+  set(ref(db, 'ricettario/ricette'), obj)
+    .then(() => aggiornaIndicatorSync('online', 'sincronizzato'))
+    .catch(() => aggiornaIndicatorSync('offline', 'errore sync'));
+
+  const catObj = {};
+  categorie.forEach((c, i) => { catObj['c' + i] = c; });
+  set(ref(db, 'ricettario/categorie'), catObj).catch(() => {});
+}
+
+function sincronizzaSpesa() {
+  if (!fbSyncAbilitato || !fbSpesaRef) {
+    // Firebase non ancora pronto — salva solo in locale
+    aggiornaIndicatorSyncSpesa('offline', 'locale');
+    return;
+  }
+  aggiornaIndicatorSyncSpesa('syncing', 'salvataggio...');
+  const { db, ref, set } = window._firebase;
+  const obj = {};
+  spesa.forEach(p => {
+    var idSano = String(p.id).replace(/[\.#$\/\[\]]/g, '_');
+    var k = 'p' + idSano;
+    obj[k] = Object.assign({}, p, { id: idSano });
+  });
+  set(fbSpesaRef, obj)
+    .then(() => aggiornaIndicatorSyncSpesa('online', 'sincronizzato'))
+    .catch((err) => {
+      console.warn('Errore sync spesa:', err);
+      aggiornaIndicatorSyncSpesa('offline', 'errore sync');
+    });
+}
+
+function aggiornaIndicatorSync(stato, testo) {
+  const dot = document.getElementById('sync-dot');
+  const label = document.getElementById('sync-label');
+  if (dot) { dot.className = 'sync-dot ' + stato; }
+  if (label) label.textContent = testo;
+}
+
+function aggiornaIndicatorSyncSpesa(stato, testo) {
+  const dot = document.getElementById('sync-dot-spesa');
+  const label = document.getElementById('sync-label-spesa');
+  if (dot) { dot.className = 'sync-dot ' + stato; }
+  if (label) label.textContent = testo;
+}
+
+// ==================== UTILS ====================
+function getCat(nome) {
+  return categorie.find(c => c.nome === nome) || { emoji:"🍽️", colore:"#888" };
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function switchView(view) {
+  viewAttiva = view;
+  document.getElementById('view-lista').style.display = view === 'lista' ? 'block' : 'none';
+  document.getElementById('view-dettaglio').style.display = 'none';
+  document.getElementById('view-spesa').style.display = view === 'spesa' ? 'block' : 'none';
+  document.getElementById('nav-ricette').classList.toggle('active', view === 'lista');
+  document.getElementById('nav-spesa').classList.toggle('active', view === 'spesa');
+
+  if (view === 'spesa') {
+    aggiornaListaSpesa();
+    document.querySelector('.fab.verde').style.display = 'flex';
+    document.querySelector('.fab:not(.verde)').style.display = 'none';
+  } else {
+    document.querySelector('.fab.verde').style.display = 'none';
+    document.querySelector('.fab:not(.verde)').style.display = 'flex';
+  }
+}
+
+function mostraView(id) {
+  document.getElementById('view-lista').style.display = id === 'lista' ? 'block' : 'none';
+  document.getElementById('view-dettaglio').style.display = id === 'dettaglio' ? 'block' : 'none';
+  document.getElementById('view-spesa').style.display = 'none';
+  window.scrollTo(0,0);
+  // Aggiorna nav
+  document.getElementById('nav-ricette').classList.add('active');
+  document.getElementById('nav-spesa').classList.remove('active');
+  // Aggiorna fab
+  document.querySelector('.fab.verde').style.display = 'none';
+  document.querySelector('.fab:not(.verde)').style.display = id === 'lista' ? 'flex' : 'none';
+}
+
+// ==================== LISTA RICETTE ====================
+function aggiornalista() {
+  const cerca = document.getElementById('cerca-input').value.toLowerCase().trim();
+  const filtrate = ricette.filter(r => {
+    const matchCat = catSelezionata === 'Tutte' || r.cat === catSelezionata;
+    const matchCerca = !cerca ||
+      r.nome.toLowerCase().includes(cerca) ||
+      (r.ingredienti || []).some(i => i.toLowerCase().includes(cerca)) ||
+      (r.proc || '').toLowerCase().includes(cerca);
+    return matchCat && matchCerca;
+  });
+
+  const lista = document.getElementById('lista');
+  if (filtrate.length === 0) {
+    lista.innerHTML = '<div class="nessuna"><div class="icon">🔍</div><p>Nessuna ricetta trovata</p></div>';
+    return;
+  }
+
+  let html = '';
+  if (cerca) html += `<div class="ricerca-info">${filtrate.length} risultati per "${cerca}"</div>`;
+
+  filtrate.forEach(r => {
+    const c = getCat(r.cat);
+    html += `<button class="ricetta-card" onclick="apriDettaglio(${r.id})">
+      <div class="card-emoji" style="background:${c.colore}20">${c.emoji}</div>
+      <div class="card-info">
+        <div class="card-nome">${r.nome}</div>
+        <div class="card-meta">${r.cat}${r.porzioni ? ' · ' + r.porzioni : ''} · ${(r.ingredienti||[]).length} ingr.</div>
+      </div>
+      <div class="card-arrow" style="color:${c.colore}">›</div>
+    </button>`;
+  });
+  lista.innerHTML = html;
+  document.getElementById('subtitle-count').textContent = `${ricette.length} ricette`;
+}
+
+function aggiornaChips() {
+  const scroll = document.getElementById('cat-scroll');
+  let html = `<button class="cat-chip ${catSelezionata==='Tutte'?'active':''}" style="${catSelezionata==='Tutte'?'background:var(--rosso);':''}" onclick="selezionaCat('Tutte')">Tutte</button>`;
+  categorie.forEach(c => {
+    const active = catSelezionata === c.nome;
+    html += `<button class="cat-chip ${active?'active':''}" style="${active?'background:'+c.colore+';':''}" onclick="selezionaCat('${c.nome}')">${c.emoji} ${c.nome}</button>`;
+  });
+  scroll.innerHTML = html;
+}
+
+function selezionaCat(nome) {
+  catSelezionata = nome;
+  aggiornaChips();
+  aggiornalista();
+}
+
+// ==================== DETTAGLIO ====================
+function apriDettaglio(id) {
+  ricettaAttiva = ricette.find(r => r.id === id);
+  if (!ricettaAttiva) return;
+  const c = getCat(ricettaAttiva.cat);
+  document.getElementById('det-header').style.background = `linear-gradient(160deg, ${c.colore} 0%, ${c.colore}cc 100%)`;
+  document.getElementById('det-cat').textContent = c.emoji + ' ' + ricettaAttiva.cat;
+  document.getElementById('det-nome').textContent = ricettaAttiva.nome;
+  document.getElementById('det-porzioni').textContent = ricettaAttiva.porzioni ? '👥 ' + ricettaAttiva.porzioni : '';
+
+  let body = '';
+  body += `<div class="sezione-card">
+    <div class="sezione-titolo">📋 Ingredienti</div>
+    ${(ricettaAttiva.ingredienti||[]).map(i => `<div class="ing-row"><span class="ing-dot">•</span><span class="ing-testo">${i}</span></div>`).join('')}
+  </div>`;
+  body += `<div class="sezione-card">
+    <div class="sezione-titolo">👩‍🍳 Procedimento</div>
+    <div class="proc-testo">${ricettaAttiva.proc}</div>
+  </div>`;
+  if (ricettaAttiva.nota) {
+    body += `<div class="nota-box" style="border-left-color:${c.colore}">
+      <div class="nota-testo">💡 ${ricettaAttiva.nota}</div>
+    </div>`;
+  }
+
+  // Pulsante "Aggiungi ingredienti alla spesa"
+  body += `<button class="btn-secondario" style="margin-top:10px" onclick="aggiungiIngredientiAllaSpesa(${ricettaAttiva.id})">
+    🛒 Aggiungi ingredienti alla spesa
+  </button>`;
+
+  document.getElementById('det-body').innerHTML = body;
+  mostraView('dettaglio');
+  document.querySelector('.fab:not(.verde)').style.display = 'none';
+}
+
+function tornaLista() {
+  ricettaAttiva = null;
+  mostraView('lista');
+}
+
+function aggiungiIngredientiAllaSpesa(id) {
+  const r = ricette.find(rx => rx.id === id);
+  if (!r) return;
+  let aggiunti = 0;
+  (r.ingredienti || []).forEach(ing => {
+    const esiste = spesa.some(p => p.nome.toLowerCase() === ing.toLowerCase());
+    if (!esiste) {
+      spesa.push({ id: Date.now() + '_' + Math.floor(Math.random()*9999), nome: ing, completato: false, ts: Date.now() });
+      aggiunti++;
+    }
+  });
+  salvaStorageSpesa();
+  sincronizzaSpesa();
+  aggiornaBadgeSpesa();
+  toast(`🛒 ${aggiunti} ingredienti aggiunti alla spesa!`);
+}
+
+// ==================== MODAL RICETTA ====================
+function apriNuovaRicetta() {
+  modalitaModifica = false;
+  document.getElementById('modal-ricetta-titolo').textContent = '✨ Nuova Ricetta';
+  document.getElementById('btn-elimina-ricetta').style.display = 'none';
+  document.getElementById('r-nome').value = '';
+  document.getElementById('r-porzioni').value = '';
+  document.getElementById('r-proc').value = '';
+  document.getElementById('r-nota').value = '';
+  popolaSelectCategorie();
+  resetIngList([]);
+  document.getElementById('modal-ricetta').classList.add('show');
+}
+
+function apriModificaRicetta() {
+  if (!ricettaAttiva) return;
+  modalitaModifica = true;
+  document.getElementById('modal-ricetta-titolo').textContent = '✏️ Modifica Ricetta';
+  document.getElementById('btn-elimina-ricetta').style.display = 'block';
+  document.getElementById('r-nome').value = ricettaAttiva.nome;
+  document.getElementById('r-porzioni').value = ricettaAttiva.porzioni || '';
+  document.getElementById('r-proc').value = ricettaAttiva.proc || '';
+  document.getElementById('r-nota').value = ricettaAttiva.nota || '';
+  popolaSelectCategorie(ricettaAttiva.cat);
+  resetIngList(ricettaAttiva.ingredienti || []);
+  document.getElementById('modal-ricetta').classList.add('show');
+}
+
+function popolaSelectCategorie(selezionata) {
+  const sel = document.getElementById('r-cat');
+  sel.innerHTML = categorie.map(c =>
+    `<option value="${c.nome}" ${c.nome === selezionata ? 'selected' : ''}>${c.emoji} ${c.nome}</option>`
+  ).join('');
+}
+
+function resetIngList(ings) {
+  const list = document.getElementById('ing-list');
+  list.innerHTML = '';
+  if (ings.length === 0) aggiungiIngrediente();
+  else ings.forEach(i => aggiungiIngrediente(i));
+}
+
+function aggiungiIngrediente(valore) {
+  const list = document.getElementById('ing-list');
+  const div = document.createElement('div');
+  div.className = 'ing-item';
+  div.innerHTML = `<input class="form-input" style="margin:0" placeholder="es. 200 g di farina" value="${valore||''}">
+    <button class="ing-remove" onclick="this.parentElement.remove()">−</button>`;
+  list.appendChild(div);
+}
+
+function chiudiModalRicetta() {
+  document.getElementById('modal-ricetta').classList.remove('show');
+}
+
+function salvaRicetta() {
+  const nome = document.getElementById('r-nome').value.trim();
+  const cat = document.getElementById('r-cat').value;
+  const proc = document.getElementById('r-proc').value.trim();
+  const ingredienti = [...document.querySelectorAll('#ing-list input')]
+    .map(i => i.value.trim()).filter(Boolean);
+  if (!nome || !proc || ingredienti.length === 0) {
+    toast('⚠️ Compila nome, ingredienti e procedimento');
+    return;
+  }
+  const dati = {
+    cat, nome,
+    porzioni: document.getElementById('r-porzioni').value.trim(),
+    ingredienti, proc,
+    nota: document.getElementById('r-nota').value.trim()
+  };
+  if (modalitaModifica && ricettaAttiva) {
+    Object.assign(ricettaAttiva, dati, { id: ricettaAttiva.id });
+  } else {
+    dati.id = nextId++;
+    ricette.push(dati);
+  }
+  salvaStorage();
+  sincronizzaRicette();
+  chiudiModalRicetta();
+  aggiornaChips();
+  aggiornalista();
+  if (modalitaModifica) {
+    toast('✅ Ricetta aggiornata!');
+    apriDettaglio(ricettaAttiva.id);
+  } else {
+    toast('✅ Ricetta salvata!');
+  }
+}
+
+function eliminaRicetta() {
+  if (!ricettaAttiva) return;
+  const idDaEliminare = ricettaAttiva.id;
+  const nomeDaEliminare = ricettaAttiva.nome;
+  if (!confirm(`Eliminare "${nomeDaEliminare}"?`)) return;
+  ricette = ricette.filter(r => r.id !== idDaEliminare);
+  ricettaAttiva = null;
+  salvaStorage();
+  sincronizzaRicette();
+  document.getElementById('modal-ricetta').classList.remove('show');
+  mostraView('lista');
+  aggiornaChips();
+  aggiornalista();
+  toast('🗑️ "' + nomeDaEliminare + '" eliminata');
+}
+
+// ==================== MODAL CATEGORIE ====================
+function apriGestisciCategorie() {
+  renderCatGestione();
+  document.getElementById('modal-categorie').classList.add('show');
+}
+
+function chiudiModalCategorie() {
+  document.getElementById('modal-categorie').classList.remove('show');
+  aggiornaChips();
+  aggiornalista();
+}
+
+function renderCatGestione() {
+  const div = document.getElementById('cat-lista-gestione');
+  div.innerHTML = categorie.map((c, i) => {
+    const n = ricette.filter(r => r.cat === c.nome).length;
+    return `<div class="cat-item">
+      <div class="cat-item-nome">
+        <select onchange="cambiaEmojiCat(${i}, this.value)" style="border:none;background:none;font-size:20px;cursor:pointer;padding:0;width:30px">
+          ${['🍽️','🥗','🥩','🐟','🥐','🍰','🍪','🧁','🍷','🥤','☕','🫙','🌿','🔥','❄️','⭐','🍢','🍕','🧁','🍋','🍲','🫕','🥘','🍜','🍣'].map(e =>
+            `<option ${e===c.emoji?'selected':''}>${e}</option>`).join('')}
+        </select>
+        <input value="${c.nome}" onchange="rinominaCat(${i}, this.value)"
+          style="border:none;background:none;font-family:Georgia,serif;font-size:15px;width:130px;outline:none;color:var(--testo)">
+        <span class="cat-count">(${n})</span>
+      </div>
+      <button class="cat-del" onclick="eliminaCat(${i})" title="Elimina">🗑️</button>
+    </div>`;
+  }).join('');
+}
+
+function cambiaEmojiCat(i, emoji) {
+  categorie[i].emoji = emoji;
+  salvaStorage();
+  sincronizzaRicette();
+}
+
+function rinominaCat(i, nuovoNome) {
+  nuovoNome = nuovoNome.trim();
+  if (!nuovoNome) return;
+  const vecchio = categorie[i].nome;
+  ricette.forEach(r => { if (r.cat === vecchio) r.cat = nuovoNome; });
+  categorie[i].nome = nuovoNome;
+  if (catSelezionata === vecchio) catSelezionata = nuovoNome;
+  salvaStorage();
+  sincronizzaRicette();
+  renderCatGestione();
+}
+
+function eliminaCat(i) {
+  const n = ricette.filter(r => r.cat === categorie[i].nome).length;
+  if (n > 0 && !confirm(`La categoria "${categorie[i].nome}" contiene ${n} ricette. Eliminarla comunque?`)) return;
+  if (catSelezionata === categorie[i].nome) catSelezionata = 'Tutte';
+  categorie.splice(i, 1);
+  salvaStorage();
+  sincronizzaRicette();
+  renderCatGestione();
+}
+
+function aggiungiCategoria() {
+  const nome = document.getElementById('nuova-cat-nome').value.trim();
+  const emoji = document.getElementById('nuova-cat-emoji').value;
+  if (!nome) { toast('⚠️ Inserisci il nome della categoria'); return; }
+  if (categorie.some(c => c.nome === nome)) { toast('⚠️ Categoria già esistente'); return; }
+  const colori = ['#e8762a','#c0392b','#8e44ad','#d4507a','#1e5c8a','#2d6a3f','#d4a017'];
+  categorie.push({ nome, emoji, colore: colori[categorie.length % colori.length] });
+  document.getElementById('nuova-cat-nome').value = '';
+  salvaStorage();
+  sincronizzaRicette();
+  renderCatGestione();
+  toast('✅ Categoria aggiunta!');
+}
+
+// ==================== LISTA DELLA SPESA ====================
+function aggiungiProdottoSpesa() {
+  const input = document.getElementById('spesa-input');
+  const nome = input.value.trim();
+  if (!nome) return;
+  spesa.push({ id: Date.now() + '_' + Math.floor(Math.random()*9999), nome, completato: false, ts: Date.now() });
+  input.value = '';
+  salvaStorageSpesa();
+  sincronizzaSpesa();
+  aggiornaListaSpesa();
+  aggiornaBadgeSpesa();
+}
+
+function toggleProdottoSpesa(id) {
+  const p = spesa.find(x => x.id === id);
+  if (!p) return;
+  p.completato = !p.completato;
+  salvaStorageSpesa();
+  sincronizzaSpesa();
+  aggiornaListaSpesa();
+  aggiornaBadgeSpesa();
+}
+
+function rimuoviProdottoSpesa(id) {
+  spesa = spesa.filter(p => p.id !== id);
+  salvaStorageSpesa();
+  sincronizzaSpesa();
+  aggiornaListaSpesa();
+  aggiornaBadgeSpesa();
+}
+
+function svuotaCompletati() {
+  const completati = spesa.filter(p => p.completato).length;
+  if (completati === 0) { toast('Nessun prodotto completato'); return; }
+  if (!confirm(`Rimuovere ${completati} prodotti completati?`)) return;
+  spesa = spesa.filter(p => !p.completato);
+  salvaStorageSpesa();
+  sincronizzaSpesa();
+  aggiornaListaSpesa();
+  aggiornaBadgeSpesa();
+  toast('✅ Prodotti rimossi!');
+}
+
+function aggiornaListaSpesa() {
+  const daComprare = spesa.filter(p => !p.completato);
+  const completati = spesa.filter(p => p.completato);
+  const totale = spesa.length;
+
+  document.getElementById('spesa-subtitle').textContent =
+    totale === 0 ? 'Lista vuota' :
+    `${daComprare.length} da comprare${completati.length > 0 ? ' · ' + completati.length + ' completati' : ''}`;
+
+  const lista = document.getElementById('spesa-lista');
+
+  if (totale === 0) {
+    lista.innerHTML = `<div class="spesa-vuota">
+      <div class="icon">🛒</div>
+      <p style="font-size:15px;font-weight:bold;margin-bottom:6px">Lista vuota!</p>
+      <p style="font-size:13px;font-family:sans-serif;">Aggiungi prodotti da comprare o usa il pulsante "Aggiungi alla spesa" nelle ricette.</p>
+    </div>`;
+    return;
+  }
+
+  let html = '';
+
+  if (daComprare.length > 0) {
+    html += `<div class="spesa-sezione-titolo">Da comprare (${daComprare.length})</div>`;
+    daComprare.forEach(p => {
+      html += `<div class="spesa-item" id="spesa-item-${p.id}">
+        <div class="spesa-check" onclick="toggleProdottoSpesa('${p.id}')"></div>
+        <span class="spesa-nome">${p.nome}</span>
+        <button class="spesa-del" onclick="rimuoviProdottoSpesa('${p.id}')">✕</button>
+      </div>`;
+    });
+  }
+
+  if (completati.length > 0) {
+    html += `<div class="spesa-sezione-titolo" style="margin-top:14px">Nel carrello (${completati.length})</div>`;
+    completati.forEach(p => {
+      html += `<div class="spesa-item completato" id="spesa-item-${p.id}">
+        <div class="spesa-check" onclick="toggleProdottoSpesa('${p.id}')">✓</div>
+        <span class="spesa-nome">${p.nome}</span>
+        <button class="spesa-del" onclick="rimuoviProdottoSpesa('${p.id}')">✕</button>
+      </div>`;
+    });
+  }
+
+  lista.innerHTML = html;
+}
+
+function aggiornaBadgeSpesa() {
+  const badge = document.getElementById('spesa-badge');
+  const daComprare = spesa.filter(p => !p.completato).length;
+  if (daComprare > 0) {
+    badge.textContent = daComprare;
+    badge.style.display = 'block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// ==================== NOTIFICHE ====================
+// Nota: in WebView Android le Web Notifications non sono supportate nativamente.
+// Usiamo promemoria visivo in-app come fallback.
+
+function isNotificationSupported() {
+  try { return ('Notification' in window) && typeof Notification !== 'undefined'; }
+  catch(e) { return false; }
+}
+
+function apriImpostazioniNotifiche() {
+  const toggleEl = document.getElementById('toggle-notif');
+  const toggleSolo = document.getElementById('toggle-notif-solo-prodotti');
+  const freqEl = document.getElementById('notif-freq');
+  toggleEl.className = 'toggle' + (notificheAbilitate ? ' on' : '');
+  toggleSolo.className = 'toggle' + (notifSoloProdotti ? ' on' : '');
+  freqEl.value = notifFreqMinuti;
+  aggiornaStatoNotifiche();
+  document.getElementById('modal-notifiche').classList.add('show');
+}
+
+function chiudiImpostazioniNotifiche() {
+  document.getElementById('modal-notifiche').classList.remove('show');
+}
+
+async function toggleNotifiche() {
+  if (!notificheAbilitate) {
+    // Tenta notifiche di sistema tramite Service Worker
+    if (isNotificationSupported()) {
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          notificheAbilitate = true;
+          avviaIntervalloNotifiche();
+          salvaStorageNotif();
+          document.getElementById('toggle-notif').className = 'toggle on';
+          toast('\uD83D\uDD14 Notifiche attivate!');
+          aggiornaStatoNotifiche();
+
+          // ✅ Tenta Periodic Background Sync (Android Chrome con PWA installata)
+          if ('periodicSync' in ServiceWorkerRegistration.prototype && window._swRegistration) {
+            try {
+              const status = await navigator.permissions.query({ name: 'periodic-background-sync' });
+              if (status.state === 'granted') {
+                await window._swRegistration.periodicSync.register('spesa-reminder', {
+                  minInterval: notifFreqMinuti * 60 * 1000
+                });
+                console.log('✅ Periodic Sync registrato');
+              }
+            } catch(e) {
+              console.warn('Periodic Sync non disponibile:', e);
+            }
+          }
+          return;
+        }
+        // Permesso negato
+        toast('❌ Permesso notifiche negato. Vai in Impostazioni Android > App > Ricettario > Notifiche');
+        aggiornaStatoNotifiche();
+        return;
+      } catch(e) {}
+    }
+    // Fallback: promemoria visivo in-app
+    notificheAbilitate = true;
+    avviaIntervalloNotifiche();
+    salvaStorageNotif();
+    document.getElementById('toggle-notif').className = 'toggle on';
+    toast('\uD83D\uDD14 Promemoria in-app attivato!');
+    aggiornaStatoNotifiche();
+  } else {
+    notificheAbilitate = false;
+    fermaIntervalloNotifiche();
+    salvaStorageNotif();
+    document.getElementById('toggle-notif').className = 'toggle';
+    toast('\uD83D\uDD15 Promemoria disattivato');
+    aggiornaStatoNotifiche();
+  }
+}
+
+function toggleNotifSoloProdotti() {
+  notifSoloProdotti = !notifSoloProdotti;
+  document.getElementById('toggle-notif-solo-prodotti').className = 'toggle' + (notifSoloProdotti ? ' on' : '');
+  salvaStorageNotif();
+}
+
+function salvaImpostazioniNotif() {
+  notifFreqMinuti = parseInt(document.getElementById('notif-freq').value);
+  salvaStorageNotif();
+  if (notificheAbilitate) {
+    fermaIntervalloNotifiche();
+    avviaIntervalloNotifiche();
+    toast('\u2705 Frequenza aggiornata!');
+  }
+  aggiornaStatoNotifiche();
+}
+
+function avviaIntervalloNotifiche() {
+  fermaIntervalloNotifiche();
+  notifIntervalId = setInterval(() => {
+    inviaNotificaSpesa();
+  }, notifFreqMinuti * 60 * 1000);
+}
+
+function fermaIntervalloNotifiche() {
+  if (notifIntervalId) {
+    clearInterval(notifIntervalId);
+    notifIntervalId = null;
+  }
+}
+
+function inviaNotificaSpesa(forzata = false) {
+  const daComprare = spesa.filter(p => !p.completato);
+  if (notifSoloProdotti && daComprare.length === 0 && !forzata) return;
+  const msg = daComprare.length === 0
+    ? 'La tua lista della spesa \u00e8 vuota.'
+    : daComprare.length === 1
+      ? `Non dimenticare: "${daComprare[0].nome}"`
+      : `Hai ${daComprare.length} prodotti da comprare!`;
+
+  const iconUrl = './icon-192.png';
+
+  // ✅ METODO 1: tramite Service Worker (funziona anche con app minimizzata)
+  if (window._swRegistration && Notification.permission === 'granted') {
+    try {
+      window._swRegistration.showNotification('\uD83D\uDED2 Lista della Spesa', {
+        body: msg,
+        icon: iconUrl,
+        badge: iconUrl,
+        tag: 'spesa-promemoria',
+        vibrate: [200, 100, 200],
+        renotify: true
+      });
+      return;
+    } catch(e) {}
+  }
+
+  // ✅ METODO 2: notifica diretta (funziona con app aperta)
+  if (isNotificationSupported() && Notification.permission === 'granted') {
+    try {
+      new Notification('\uD83D\uDED2 Lista della Spesa', {
+        body: msg,
+        icon: iconUrl,
+        tag: 'spesa-promemoria',
+        vibrate: [200, 100, 200]
+      });
+      return;
+    } catch(e) {}
+  }
+
+  // Fallback banner visivo in-app
+  mostraBannerPromemoria(msg);
+}
+
+function mostraBannerPromemoria(msg) {
+  const vecchio = document.getElementById('promemoria-banner');
+  if (vecchio) vecchio.remove();
+  const banner = document.createElement('div');
+  banner.id = 'promemoria-banner';
+  banner.style.cssText = 'position:fixed;top:70px;left:50%;transform:translateX(-50%);width:calc(100% - 32px);max-width:448px;background:var(--verde);color:white;border-radius:14px;padding:14px 16px;z-index:9999;font-family:sans-serif;font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,0.2);display:flex;align-items:center;gap:12px;';
+  banner.innerHTML = `<span style="font-size:22px">\uD83D\uDED2</span><span style="flex:1;line-height:1.4">${msg}</span><button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.25);border:none;color:white;border-radius:50%;width:24px;height:24px;font-size:14px;cursor:pointer;flex-shrink:0">\u2715</button>`;
+  document.body.appendChild(banner);
+  setTimeout(() => { if (banner.parentElement) banner.remove(); }, 6000);
+}
+
+function testNotifica() {
+  const daComprare = spesa.filter(p => !p.completato);
+  const msg = daComprare.length === 0
+    ? 'La tua lista della spesa \u00e8 vuota.'
+    : daComprare.length === 1
+      ? `Non dimenticare: "${daComprare[0].nome}"`
+      : `Hai ${daComprare.length} prodotti da comprare!`;
+  // Mostra sempre il banner in-app + tenta notifica sistema
+  mostraBannerPromemoria(msg);
+  if (isNotificationSupported() && Notification.permission === 'granted') {
+    inviaNotificaSpesa(true);
+  }
+  toast('\uD83D\uDD14 Promemoria inviato!');
+}
+
+function aggiornaStatoNotifiche() {
+  const stato = document.getElementById('notif-stato');
+  const freq = document.getElementById('notif-freq');
+  const freqTesto = freq ? freq.options[freq.selectedIndex]?.text : '';
+  const notifSistema = isNotificationSupported() && Notification.permission === 'granted';
+  const swAttivo = !!window._swRegistration;
+
+  if (notificheAbilitate) {
+    const daComprare = spesa.filter(p => !p.completato).length;
+    if (notifSistema && swAttivo) {
+      stato.innerHTML = `✅ <strong>Notifiche reali attive</strong> (${freqTesto})<br>
+        Arriveranno anche con l'app chiusa o minimizzata.<br>
+        ${daComprare > 0 ? `📋 ${daComprare} prodotti in lista.` : '📭 Lista vuota.'}`;
+    } else if (notifSistema) {
+      stato.innerHTML = `✅ Notifiche attive (${freqTesto})<br>
+        ℹ️ Arrivano quando l'app è aperta.<br>
+        ${daComprare > 0 ? `📋 ${daComprare} prodotti in lista.` : '📭 Lista vuota.'}`;
+    } else {
+      stato.innerHTML = `✅ Promemoria in-app attivo (${freqTesto})<br>
+        ℹ️ Mostrati come banner nell'app.`;
+    }
+  } else if (isNotificationSupported() && Notification.permission === 'denied') {
+    stato.innerHTML = '❌ Notifiche bloccate.<br>Vai in <strong>Impostazioni Android → App → Ricettario → Notifiche</strong> per sbloccarle.';
+  } else {
+    stato.innerHTML = '⏳ Attiva il toggle per ricevere promemoria.<br>Se installi l\'app (PWA), le notifiche arrivano anche con l\'app chiusa.';
+  }
+}
+
+// ==================== OCR ====================
+let ocrBase64 = null;
+
+function apriFotoOCR() {
+  riazzeraOCR();
+  document.getElementById('modal-ocr').classList.add('show');
+}
+
+function chiudiModalOCR() {
+  document.getElementById('modal-ocr').classList.remove('show');
+}
+
+function gestisciImmagineOCR(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    ocrBase64 = e.target.result.split(',')[1];
+    document.getElementById('ocr-preview-img').src = e.target.result;
+    document.getElementById('ocr-preview-img').style.display = 'block';
+    document.getElementById('ocr-area').style.display = 'none';
+    eseguiOCR();
+  };
+  reader.readAsDataURL(file);
+}
+
+async function eseguiOCR() {
+  document.getElementById('ocr-spinner').style.display = 'block';
+  document.getElementById('ocr-risultato').style.display = 'none';
+  document.getElementById('btn-usa-ocr').style.display = 'none';
+  document.getElementById('btn-riprova-ocr').style.display = 'none';
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: ocrBase64 } },
+            { type: 'text', text: `Analizza questa immagine che contiene una ricetta. Estrai le informazioni e rispondi SOLO con un JSON valido (nessun testo prima o dopo), con questa struttura esatta:
+{"nome":"nome della ricetta","porzioni":"es. 4 persone o stringa vuota","ingredienti":["ingrediente 1","ingrediente 2"],"proc":"procedimento completo in un paragrafo","nota":"eventuale nota o consiglio, stringa vuota se non presente"}
+Se l'immagine non contiene una ricetta, rispondi con: {"errore":"Non è una ricetta"}` }
+          ]
+        }]
+      })
+    });
+
+    const data = await res.json();
+    const testo = (data.content || []).map(b => b.text || '').join('');
+    const clean = testo.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    document.getElementById('ocr-spinner').style.display = 'none';
+    if (parsed.errore) {
+      document.getElementById('ocr-risultato').textContent = '❌ ' + parsed.errore;
+      document.getElementById('ocr-risultato').style.display = 'block';
+      document.getElementById('btn-riprova-ocr').style.display = 'block';
+      return;
+    }
+    ocrDatiRicetta = parsed;
+    const anteprima = `📝 ${parsed.nome}\n\n📋 Ingredienti:\n${(parsed.ingredienti||[]).join('\n')}\n\n👩‍🍳 Procedimento:\n${parsed.proc}${parsed.nota ? '\n\n💡 Nota: '+parsed.nota : ''}`;
+    document.getElementById('ocr-risultato').textContent = anteprima;
+    document.getElementById('ocr-risultato').style.display = 'block';
+    document.getElementById('btn-usa-ocr').style.display = 'block';
+    document.getElementById('btn-riprova-ocr').style.display = 'block';
+  } catch(e) {
+    document.getElementById('ocr-spinner').style.display = 'none';
+    document.getElementById('ocr-risultato').textContent = '❌ Errore nella lettura. Riprova con un\'immagine più nitida.';
+    document.getElementById('ocr-risultato').style.display = 'block';
+    document.getElementById('btn-riprova-ocr').style.display = 'block';
+  }
+}
+
+function usaRisultatoOCR() {
+  if (!ocrDatiRicetta) return;
+  chiudiModalOCR();
+  modalitaModifica = false;
+  document.getElementById('modal-ricetta-titolo').textContent = '✨ Nuova Ricetta (da foto)';
+  document.getElementById('btn-elimina-ricetta').style.display = 'none';
+  document.getElementById('r-nome').value = ocrDatiRicetta.nome || '';
+  document.getElementById('r-porzioni').value = ocrDatiRicetta.porzioni || '';
+  document.getElementById('r-proc').value = ocrDatiRicetta.proc || '';
+  document.getElementById('r-nota').value = ocrDatiRicetta.nota || '';
+  popolaSelectCategorie();
+  resetIngList(ocrDatiRicetta.ingredienti || []);
+  document.getElementById('modal-ricetta').classList.add('show');
+}
+
+function riazzeraOCR() {
+  ocrBase64 = null; ocrDatiRicetta = null;
+  document.getElementById('ocr-area').style.display = 'block';
+  document.getElementById('ocr-preview-img').style.display = 'none';
+  document.getElementById('ocr-spinner').style.display = 'none';
+  document.getElementById('ocr-risultato').style.display = 'none';
+  document.getElementById('btn-usa-ocr').style.display = 'none';
+  document.getElementById('btn-riprova-ocr').style.display = 'none';
+  document.getElementById('ocr-file').value = '';
+  document.getElementById('ocr-camera').value = '';
+  document.getElementById('ocr-gallery').value = '';
+}
+
+// ==================== PWA INSTALL ====================
+let deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('install-banner').style.display = 'flex';
+});
+
+document.getElementById('install-btn').addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  document.getElementById('install-banner').style.display = 'none';
+});
+
+document.getElementById('close-banner-btn').addEventListener('click', () => {
+  document.getElementById('install-banner').style.display = 'none';
+});
+
+// ==================== SERVICE WORKER ====================
+// ==================== MANIFEST ====================
+function setupPWA() {
+  // ✅ Usa manifest.json esterno (file reale, non blob)
+  document.getElementById('manifest-link').href = './manifest.json';
+
+  // ✅ IMPORTANTE: usa sw.js come file separato (non blob) per notifiche in background
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js', { scope: './' })
+      .then(reg => {
+        console.log('✅ Service Worker registrato:', reg.scope);
+        window._swRegistration = reg;
+      })
+      .catch(err => {
+        console.warn('⚠️ SW non registrato (normale in locale senza server):', err);
+      });
+  }
+}
+
+// ==================== IMPORT / EXPORT ====================
+function switchTab(nome) {
+  ['esporta','importa','backup'].forEach(t => {
+    document.getElementById('tp-' + t).classList.toggle('active', t === nome);
+    document.getElementById('tb-' + t).classList.toggle('active', t === nome);
+  });
+}
+
+let exportSelezione = new Set();
+
+function renderExportChecklist() {
+  const list = document.getElementById('export-check-list');
+  list.innerHTML = ricette.map(r =>
+    `<label class="check-item">
+      <input type="checkbox" ${exportSelezione.has(r.id) ? 'checked' : ''}
+        onchange="toggleExportSel(${r.id}, this.checked)">
+      <span>${r.nome} <span style="color:var(--testo2);font-size:11px;font-family:sans-serif;">(${r.cat})</span></span>
+    </label>`
+  ).join('');
+}
+
+function toggleExportSel(id, checked) {
+  if (checked) exportSelezione.add(id);
+  else exportSelezione.delete(id);
+}
+
+function selezionaTutteExport(val) {
+  exportSelezione = val ? new Set(ricette.map(r => r.id)) : new Set();
+  renderExportChecklist();
+}
+
+function getRicetteSelezionate() {
+  return ricette.filter(r => exportSelezione.has(r.id));
+}
+
+function formatRicettaTesto(r) {
+  let t = `📖 ${r.nome.toUpperCase()}\n`;
+  if (r.cat) t += `Categoria: ${r.cat}\n`;
+  if (r.porzioni) t += `Porzioni: ${r.porzioni}\n`;
+  t += `\n📋 INGREDIENTI:\n`;
+  (r.ingredienti || []).forEach(i => { t += `• ${i}\n`; });
+  t += `\n👩‍🍳 PROCEDIMENTO:\n${r.proc}\n`;
+  if (r.nota) t += `\n💡 NOTA: ${r.nota}\n`;
+  return t;
+}
+
+function scaricaBlob(contenuto, tipo, nome) {
+  const blob = new Blob([contenuto], { type: tipo });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nome; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function esportaFormato(formato) {
+  const sel = getRicetteSelezionate();
+  if (sel.length === 0) { toast('⚠️ Seleziona almeno una ricetta'); return; }
+  if (formato === 'json') {
+    const dati = { versione: 1, data_export: new Date().toLocaleDateString('it-IT'), ricette: sel, categorie };
+    scaricaBlob(JSON.stringify(dati, null, 2), 'application/json',
+      'ricettario_export_' + new Date().toISOString().slice(0, 10) + '.json');
+    toast('✅ JSON esportato!');
+  } else if (formato === 'testo') {
+    const sep = '\n\n' + '─'.repeat(40) + '\n\n';
+    scaricaBlob(sel.map(formatRicettaTesto).join(sep), 'text/plain;charset=utf-8', 'ricette.txt');
+    toast('✅ Testo esportato!');
+  } else if (formato === 'pdf') {
+    esportaPDF(sel);
+  }
+}
+
+function chiudiPdfOverlay() {
+  document.getElementById('pdf-overlay').classList.remove('visible');
+  document.body.style.overflow = '';
+}
+
+function esportaPDF(sel) {
+  // Costruisce il contenuto direttamente nell'overlay interno (funziona nelle WebView/APK)
+  let inner = '<h1>📖 Le Mie Ricette</h1>';
+  sel.forEach(r => {
+    inner += `<div class="pdf-r"><h2>${r.nome}</h2>
+<div class="meta">${r.cat}${r.porzioni ? ' · ' + r.porzioni : ''}</div>
+<h3>📋 Ingredienti</h3><ul>${(r.ingredienti||[]).map(i=>`<li>${i}</li>`).join('')}</ul>
+<h3>👩‍🍳 Procedimento</h3><p>${r.proc}</p>
+${r.nota ? `<div class="nota">💡 ${r.nota}</div>` : ''}</div>`;
+  });
+  document.getElementById('pdf-content-body').innerHTML = inner;
+  document.getElementById('pdf-overlay').classList.add('visible');
+  document.body.style.overflow = 'hidden';
+  document.getElementById('pdf-overlay').scrollTop = 0;
+  toast('✅ Usa "Stampa / Salva PDF" per esportare');
+}
+
+function importaDati() {
+  document.getElementById('import-file').click();
+}
+
+function gestisciImportazione(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const dati = JSON.parse(e.target.result);
+      if (!dati.ricette || !Array.isArray(dati.ricette)) { toast('❌ File non valido'); return; }
+      const moda = document.getElementById('import-mode').value;
+      if (moda === 'sostituisci') {
+        if (!confirm('Sostituire TUTTE le ricette esistenti?')) return;
+        ricette = dati.ricette;
+        if (dati.categorie) categorie = dati.categorie;
+        const maxId = ricette.reduce((mx, rx) => Math.max(mx, rx.id || 0), 0);
+        nextId = maxId + 1;
+        toast('✅ Ricettario ripristinato!');
+      } else {
+        const nomiEsistenti = new Set(ricette.map(r => r.nome.toLowerCase()));
+        let aggiunte = 0;
+        dati.ricette.forEach(r => {
+          if (!nomiEsistenti.has(r.nome.toLowerCase())) {
+            r.id = nextId++; ricette.push(r); aggiunte++;
+          }
+        });
+        if (dati.categorie) {
+          const catEx = new Set(categorie.map(c => c.nome));
+          dati.categorie.forEach(c => { if (!catEx.has(c.nome)) categorie.push(c); });
+        }
+        toast('✅ ' + aggiunte + ' ricette importate!');
+      }
+      salvaStorage();
+      sincronizzaRicette();
+      chiudiModalImportExport();
+      aggiornaChips();
+      aggiornalista();
+    } catch(err) { toast('❌ Errore: ' + err.message); }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function apriModalImportExport() {
+  exportSelezione = new Set(ricette.map(r => r.id));
+  document.getElementById('count-ricette-modal').textContent = ricette.length;
+  document.getElementById('count-ricette-modal2').textContent = ricette.length;
+  switchTab('esporta');
+  renderExportChecklist();
+  document.getElementById('modal-importexport').classList.add('show');
+}
+
+function chiudiModalImportExport() {
+  document.getElementById('modal-importexport').classList.remove('show');
+}
+
+function ripristinaPredefinite() {
+  if (!confirm('Ripristinare le ricette originali? Verranno aggiunte quelle mancanti senza eliminare le tue.')) return;
+  const nomiEsistenti = new Set(ricette.map(r => r.nome.toLowerCase()));
+  let aggiunte = 0;
+  RICETTE_DEFAULT.forEach(r => {
+    if (!nomiEsistenti.has(r.nome.toLowerCase())) {
+      ricette.push(Object.assign({}, r, { id: nextId++ }));
+      aggiunte++;
+    }
+  });
+  salvaStorage(); sincronizzaRicette(); chiudiModalImportExport(); aggiornaChips(); aggiornalista();
+  toast('✅ ' + aggiunte + ' ricette ripristinate!');
+}
+
+// ==================== CONDIVISIONE ====================
+let condividiRicettaAttuale = null;
+let qrImg = null;
+
+function apriCondividiRicetta() {
+  if (!ricettaAttiva) return;
+  condividiRicettaAttuale = ricettaAttiva;
+  document.getElementById('condividi-nome').textContent = ricettaAttiva.nome;
+  qrImg = null;
+  document.getElementById('btn-scarica-qr').style.display = 'none';
+  const wrap = document.getElementById('qr-wrap');
+  wrap.innerHTML = '<div style="font-size:13px;color:var(--testo2);font-family:sans-serif;padding:10px 0;">Generazione QR...</div>';
+
+  // Codifica la ricetta come JSON compatto nel QR — compatibile con lo scanner interno dell'app
+  const datiQR = {
+    nome: ricettaAttiva.nome,
+    cat: ricettaAttiva.cat || '',
+    porzioni: ricettaAttiva.porzioni || '',
+    ingredienti: ricettaAttiva.ingredienti || [],
+    proc: ricettaAttiva.proc,
+    nota: ricettaAttiva.nota || ''
+  };
+  const testoQR = JSON.stringify(datiQR);
+
+  // Genera il QR localmente con qrcode.js (funziona offline e nelle WebView)
+  setTimeout(() => {
+    try {
+      wrap.innerHTML = '';
+      const qrDiv = document.createElement('div');
+      qrDiv.style.cssText = 'display:inline-block;border-radius:10px;overflow:hidden;border:1px solid var(--bordo)';
+      wrap.appendChild(qrDiv);
+      new QRCode(qrDiv, {
+        text: testoQR,
+        width: 180,
+        height: 180,
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      qrImg = qrDiv.querySelector('img') || qrDiv.querySelector('canvas');
+      document.getElementById('btn-scarica-qr').style.display = 'block';
+    } catch(e) {
+      wrap.innerHTML = '<div style="font-size:13px;color:var(--testo2);font-family:sans-serif;">⚠️ Errore generazione QR</div>';
+    }
+  }, 100);
+  document.getElementById('link-section').style.display = 'none';
+  document.getElementById('btn-section').style.display = 'none';
+  document.getElementById('modal-condividi').classList.add('show');
+}
+
+function chiudiCondividi() { document.getElementById('modal-condividi').classList.remove('show'); }
+
+function copiaTestoRicetta() {
+  if (!condividiRicettaAttuale) return;
+  const testo = formatRicettaTesto(condividiRicettaAttuale);
+  navigator.clipboard.writeText(testo)
+    .then(() => toast('✅ Testo copiato negli appunti!'))
+    .catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = testo; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      toast('✅ Testo copiato!');
+    });
+}
+
+function scaricaQR() {
+  if (!qrImg) return;
+  const nome = condividiRicettaAttuale ? condividiRicettaAttuale.nome.replace(/\s+/g,'_') : 'ricetta';
+  const a = document.createElement('a');
+  // qrImg può essere <canvas> (qrcode.js fallback) o <img>
+  if (qrImg.tagName === 'CANVAS') {
+    a.href = qrImg.toDataURL('image/png');
+  } else {
+    a.href = qrImg.src;
+  }
+  a.download = 'qr_' + nome + '.png';
+  a.click();
+  toast('✅ QR scaricato!');
+}
+
+// ==================== SCAN QR RICETTA ====================
+let qrScanDati = null;
+
+function apriScanQR() {
+  riazzeraScanQR();
+  document.getElementById('modal-scan-qr').classList.add('show');
+}
+
+function chiudiScanQR() {
+  document.getElementById('modal-scan-qr').classList.remove('show');
+}
+
+function gestisciScanQR(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const preview = document.getElementById('qr-scan-preview');
+    preview.src = e.target.result;
+    preview.style.display = 'block';
+    document.getElementById('qr-scan-area').style.display = 'none';
+    elaboraQRConAI(e.target.result.split(',')[1]);
+  };
+  reader.readAsDataURL(file);
+}
+
+async function elaboraQRConAI(base64) {
+  document.getElementById('qr-scan-spinner').style.display = 'block';
+  document.getElementById('qr-scan-risultato').style.display = 'none';
+  document.getElementById('btn-usa-qr').style.display = 'none';
+  document.getElementById('btn-riprova-qr').style.display = 'none';
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
+            { type: 'text', text: `Questa immagine contiene un QR Code che codifica i dati JSON di una ricetta. 
+Leggi il QR Code e restituisci SOLO il contenuto JSON che contiene (nessun testo prima o dopo, nessun markdown).
+Il formato atteso è: {"nome":"...","ingredienti":[...],"proc":"...","nota":"..."}
+Se non riesci a leggere il QR Code, rispondi con: {"errore":"QR non leggibile"}` }
+          ]
+        }]
+      })
+    });
+    const data = await res.json();
+    const testo = (data.content || []).map(b => b.text || '').join('');
+    const clean = testo.replace(/```json|```/g, '').trim();
+    
+    document.getElementById('qr-scan-spinner').style.display = 'none';
+    
+    let parsed;
+    try { parsed = JSON.parse(clean); }
+    catch(e) {
+      // Tenta di estrarre il JSON dal testo
+      const match = clean.match(/\{[\s\S]*\}/);
+      if (match) { try { parsed = JSON.parse(match[0]); } catch(e2) { parsed = { errore: 'JSON non valido' }; } }
+      else { parsed = { errore: 'Formato non riconosciuto' }; }
+    }
+
+    if (parsed.errore) {
+      document.getElementById('qr-scan-risultato').textContent = '❌ ' + parsed.errore + '. Assicurati che il QR sia nitido e ben inquadrato.';
+      document.getElementById('qr-scan-risultato').style.display = 'block';
+      document.getElementById('btn-riprova-qr').style.display = 'block';
+      return;
+    }
+    if (!parsed.nome || !parsed.proc) {
+      document.getElementById('qr-scan-risultato').textContent = '❌ Il QR non contiene una ricetta valida.';
+      document.getElementById('qr-scan-risultato').style.display = 'block';
+      document.getElementById('btn-riprova-qr').style.display = 'block';
+      return;
+    }
+
+    qrScanDati = parsed;
+    const anteprima = `📝 ${parsed.nome}\n\n📋 Ingredienti:\n${(parsed.ingredienti||[]).join('\n')}\n\n👩‍🍳 Procedimento:\n${parsed.proc}${parsed.nota ? '\n\n💡 Nota: '+parsed.nota : ''}`;
+    document.getElementById('qr-scan-risultato').textContent = anteprima;
+    document.getElementById('qr-scan-risultato').style.display = 'block';
+    document.getElementById('btn-usa-qr').style.display = 'block';
+    document.getElementById('btn-riprova-qr').style.display = 'block';
+
+  } catch(e) {
+    document.getElementById('qr-scan-spinner').style.display = 'none';
+    document.getElementById('qr-scan-risultato').textContent = '❌ Errore nella lettura. Riprova con un\'immagine più nitida.';
+    document.getElementById('qr-scan-risultato').style.display = 'block';
+    document.getElementById('btn-riprova-qr').style.display = 'block';
+  }
+}
+
+function usaRicettaDaQR() {
+  if (!qrScanDati) return;
+  chiudiScanQR();
+  modalitaModifica = false;
+  document.getElementById('modal-ricetta-titolo').textContent = '✨ Nuova Ricetta (da QR)';
+  document.getElementById('btn-elimina-ricetta').style.display = 'none';
+  document.getElementById('r-nome').value = qrScanDati.nome || '';
+  document.getElementById('r-porzioni').value = qrScanDati.porzioni || '';
+  document.getElementById('r-proc').value = qrScanDati.proc || '';
+  document.getElementById('r-nota').value = qrScanDati.nota || '';
+  popolaSelectCategorie();
+  resetIngList(qrScanDati.ingredienti || []);
+  document.getElementById('modal-ricetta').classList.add('show');
+  qrScanDati = null;
+}
+
+function riazzeraScanQR() {
+  qrScanDati = null;
+  document.getElementById('qr-scan-area').style.display = 'block';
+  document.getElementById('qr-scan-preview').style.display = 'none';
+  document.getElementById('qr-scan-spinner').style.display = 'none';
+  document.getElementById('qr-scan-risultato').style.display = 'none';
+  document.getElementById('btn-usa-qr').style.display = 'none';
+  document.getElementById('btn-riprova-qr').style.display = 'none';
+  document.getElementById('qr-scan-file').value = '';
+  document.getElementById('qr-scan-camera').value = '';
+  document.getElementById('qr-scan-gallery').value = '';
+}
+
+// ==================== IMPORTA RICETTA CONDIVISA ====================
+function importaRicettaCondivisa() {
+  const dati = window._ricettaCondivisa;
+  if (!dati) return;
+  document.getElementById('modal-import-condivisa').classList.remove('show');
+  // Controlla se esiste già
+  if (ricette.some(r => r.nome.toLowerCase() === dati.nome.toLowerCase())) {
+    toast('⚠️ Ricetta "' + dati.nome + '" già presente!');
+    return;
+  }
+  const nuova = {
+    id: nextId++,
+    cat: dati.cat || (categorie[0] ? categorie[0].nome : 'Salato'),
+    nome: dati.nome,
+    porzioni: dati.porzioni || '',
+    ingredienti: dati.ingredienti || [],
+    proc: dati.proc || '',
+    nota: dati.nota || ''
+  };
+  ricette.push(nuova);
+  salvaStorage();
+  sincronizzaRicette();
+  aggiornaChips();
+  aggiornalista();
+  window._ricettaCondivisa = null;
+  toast('✅ Ricetta "' + nuova.nome + '" aggiunta!');
+  // Apri subito la ricetta
+  setTimeout(() => apriDettaglio(nuova.id), 300);
+}
+
+function anteprimaRicettaCondivisa() {
+  const dati = window._ricettaCondivisa;
+  if (!dati) return;
+  document.getElementById('modal-import-condivisa').classList.remove('show');
+  // Mostra come "anteprima" nel form di modifica senza salvare
+  modalitaModifica = false;
+  document.getElementById('modal-ricetta-titolo').textContent = '🎁 Ricetta ricevuta (da QR)';
+  document.getElementById('btn-elimina-ricetta').style.display = 'none';
+  document.getElementById('r-nome').value = dati.nome || '';
+  document.getElementById('r-porzioni').value = dati.porzioni || '';
+  document.getElementById('r-proc').value = dati.proc || '';
+  document.getElementById('r-nota').value = dati.nota || '';
+  popolaSelectCategorie(dati.cat);
+  resetIngList(dati.ingredienti || []);
+  document.getElementById('modal-ricetta').classList.add('show');
+  window._ricettaCondivisa = null;
+}
+
+// ==================== INIT ====================
+caricaStorage();
+setupPWA();
+aggiornaChips();
+aggiornalista();
+mostraView('lista');
+aggiornaListaSpesa();
+aggiornaBadgeSpesa();
+
+// Avvia notifiche se erano attive
+if (notificheAbilitate) {
+  avviaIntervalloNotifiche();
+  // Mostra promemoria in-app se ci sono prodotti
+  setTimeout(() => { inviaNotificaSpesa(); }, 2000);
+}
+
+// Inizializza Firebase — aspetta che il modulo ES sia pronto
+function attendiFirebaseEInizializza(tentativo) {
+  tentativo = tentativo || 0;
+  if (window._firebase && window._firebase.abilitato()) {
+    inizializzaFirebase();
+  } else if (tentativo < 20) {
+    // Riprova ogni 300ms per max 6 secondi
+    setTimeout(() => attendiFirebaseEInizializza(tentativo + 1), 300);
+  } else {
+    // Firebase non disponibile, mostra avviso
+    console.warn('Firebase non disponibile dopo 6s');
+    inizializzaFirebase(); // chiama comunque per mostrare stato offline
+  }
+}
+attendiFirebaseEInizializza();
+
+// ---- Chiudi modal toccando lo sfondo ----
+const MODAL_CHIUDI = {
+  'modal-ricetta':        () => chiudiModalRicetta(),
+  'modal-categorie':      () => chiudiModalCategorie(),
+  'modal-ocr':            () => chiudiModalOCR(),
+  'modal-notifiche':      () => chiudiImpostazioniNotifiche(),
+  'modal-importexport':   () => chiudiModalImportExport(),
+  'modal-condividi':      () => chiudiCondividi(),
+  'modal-import-condivisa': () => document.getElementById('modal-import-condivisa').classList.remove('show'),
+  'modal-scan-qr':        () => chiudiScanQR(),
+};
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) {
+      const fn = MODAL_CHIUDI[overlay.id];
+      if (fn) fn();
+    }
+  });
+});
+(function controllaRicettaCondivisa() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const b64 = params.get('ricetta');
+    if (!b64) return;
+    const json = decodeURIComponent(escape(atob(b64)));
+    const dati = JSON.parse(json);
+    if (!dati.nome || !dati.proc) return;
+
+    // Pulisci l'URL senza ricaricare la pagina
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    // Mostra modal di importazione ricetta condivisa
+    setTimeout(() => {
+      document.getElementById('import-ricetta-condivisa-nome').textContent = dati.nome;
+      document.getElementById('import-ricetta-condivisa-cat').textContent = dati.cat || '';
+      document.getElementById('import-ricetta-condivisa-ing').textContent =
+        (dati.ingredienti || []).length + ' ingredienti';
+      window._ricettaCondivisa = dati;
+      document.getElementById('modal-import-condivisa').classList.add('show');
+    }, 600);
+  } catch(e) {}
+})();
+</script>
+
+<!-- MODAL: IMPORT/EXPORT -->
+<div class="modal-overlay" id="modal-importexport">
+  <div class="modal-box">
+    <div class="modal-title">
+      <span>💾 Esporta &amp; Importa</span>
+      <button class="modal-close" onclick="chiudiModalImportExport()">✕</button>
+    </div>
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tb-esporta" onclick="switchTab('esporta')">📤 Esporta</button>
+      <button class="tab-btn" id="tb-importa" onclick="switchTab('importa')">📥 Importa</button>
+      <button class="tab-btn" id="tb-backup" onclick="switchTab('backup')">🔄 Backup</button>
+    </div>
+    <div class="tab-panel active" id="tp-esporta">
+      <div style="background:var(--panna2);border-radius:10px;padding:11px;margin-bottom:12px;font-size:13px;color:var(--testo2);font-family:sans-serif;">
+        📊 <strong id="count-ricette-modal">?</strong> ricette totali
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button class="btn-small" onclick="selezionaTutteExport(true)" style="flex:1">✅ Seleziona tutte</button>
+        <button class="btn-small" onclick="selezionaTutteExport(false)" style="flex:1">⬜ Deseleziona</button>
+      </div>
+      <div class="ricette-check-list" id="export-check-list"></div>
+      <div class="modal-section-title">Formato di esportazione</div>
+      <div class="btn-grid">
+        <button class="btn-small primario" onclick="esportaFormato('json')">📋 JSON<br><span style="font-size:10px;opacity:.8">Backup completo</span></button>
+        <button class="btn-small" onclick="esportaFormato('testo')">📝 Testo<br><span style="font-size:10px;opacity:.7">WhatsApp / Email</span></button>
+        <button class="btn-small" onclick="esportaFormato('pdf')" style="grid-column:1/-1">📄 PDF / Stampa</button>
+      </div>
+    </div>
+    <div class="tab-panel" id="tp-importa">
+      <p style="font-size:13px;color:var(--testo2);font-family:sans-serif;margin-bottom:14px;line-height:1.6;">
+        Carica un file JSON esportato in precedenza per aggiungere o ripristinare ricette.
+      </p>
+      <div class="form-group">
+        <label class="form-label">Modalità</label>
+        <select class="form-select" id="import-mode">
+          <option value="unisci">Unisci (aggiunge le ricette mancanti)</option>
+          <option value="sostituisci">Sostituisci tutto (ripristino completo)</option>
+        </select>
+      </div>
+      <button class="btn-primario" onclick="importaDati()">📥 Carica file JSON</button>
+      <input type="file" id="import-file" accept=".json,application/json" style="display:none" onchange="gestisciImportazione(this)">
+    </div>
+    <div class="tab-panel" id="tp-backup">
+      <div style="background:var(--panna2);border-radius:10px;padding:11px;margin-bottom:14px;font-size:13px;color:var(--testo2);font-family:sans-serif;">
+        📊 Hai <strong id="count-ricette-modal2">?</strong> ricette salvate.
+      </div>
+      <div class="modal-section-title">Ripristino ricette originali</div>
+      <p style="font-size:13px;color:var(--testo2);font-family:sans-serif;margin-bottom:12px;line-height:1.5;">Aggiunge le ricette originali mancanti senza eliminare le tue.</p>
+      <button class="btn-secondario" onclick="ripristinaPredefinite()">📖 Ripristina ricette originali</button>
+    </div>
+    <button class="btn-secondario" onclick="chiudiModalImportExport()" style="margin-top:8px">Chiudi</button>
+  </div>
+</div>
+
+<!-- MODAL: CONDIVIDI -->
+<div class="modal-overlay" id="modal-condividi">
+  <div class="modal-box">
+    <div class="modal-title">
+      <span>🔗 Condividi Ricetta</span>
+      <button class="modal-close" onclick="chiudiCondividi()">✕</button>
+    </div>
+    <div id="condividi-nome" style="font-size:16px;font-weight:bold;margin-bottom:16px;color:var(--testo);line-height:1.3;"></div>
+    <div class="modal-section-title" style="margin-top:0">📝 Copia testo</div>
+    <button class="btn-primario" onclick="copiaTestoRicetta()" style="margin-bottom:4px">📋 Copia testo formattato</button>
+    <p style="font-size:12px;color:var(--testo2);font-family:sans-serif;margin-bottom:16px;">Pronto per WhatsApp, email o qualsiasi app</p>
+    <div id="link-section" style="display:none;">
+      <div class="modal-section-title">🔗 Link condivisibile</div>
+      <div class="link-box" id="link-box"></div>
+    </div>
+    <div class="btn-grid" id="btn-section" style="display:none;margin-bottom:4px">
+      <button class="btn-small" onclick="copiaLink()">📋 Copia link</button>
+      <button class="btn-small" onclick="apriLink()">🌐 Apri link</button>
+    </div>
+    <div class="modal-section-title">📱 QR Code</div>
+    <div class="qr-wrap" id="qr-wrap"></div>
+    <button class="btn-secondario" onclick="scaricaQR()" id="btn-scarica-qr" style="display:none;margin-bottom:8px">⬇️ Scarica QR Code</button>
+    <button class="btn-secondario" onclick="chiudiCondividi()">Chiudi</button>
+  </div>
+</div>
+
+<!-- MODAL: RICETTA CONDIVISA (da QR) -->
+<div class="modal-overlay" id="modal-import-condivisa">
+  <div class="modal-box">
+    <div class="modal-title">
+      <span>🎁 Ricetta ricevuta!</span>
+      <button class="modal-close" onclick="document.getElementById('modal-import-condivisa').classList.remove('show')">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--testo2);font-family:sans-serif;margin-bottom:14px;line-height:1.5;">
+      Hai ricevuto una ricetta condivisa tramite QR Code:
+    </p>
+    <div style="background:var(--panna2);border-radius:12px;padding:14px;margin-bottom:16px;border:1px solid var(--bordo);">
+      <div style="font-size:16px;font-weight:bold;color:var(--testo);margin-bottom:4px;" id="import-ricetta-condivisa-nome"></div>
+      <div style="font-size:12px;color:var(--testo2);font-family:sans-serif;" id="import-ricetta-condivisa-cat"></div>
+      <div style="font-size:12px;color:var(--testo2);font-family:sans-serif;margin-top:2px;" id="import-ricetta-condivisa-ing"></div>
+    </div>
+    <button class="btn-primario" onclick="importaRicettaCondivisa()">✅ Aggiungi al mio ricettario</button>
+    <button class="btn-secondario" onclick="anteprimaRicettaCondivisa()">👁️ Vedi prima la ricetta</button>
+    <button class="btn-secondario" onclick="document.getElementById('modal-import-condivisa').classList.remove('show')">Non ora</button>
+  </div>
+</div>
+
+<!-- MODAL: SCANSIONA QR RICETTA -->
+<div class="modal-overlay" id="modal-scan-qr">
+  <div class="modal-box">
+    <div class="modal-title">
+      <span>📷 Scansiona QR Ricetta</span>
+      <button class="modal-close" onclick="chiudiScanQR()">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--testo2);margin-bottom:12px;font-family:sans-serif;line-height:1.5;">
+      Scatta una foto al QR Code di una ricetta condivisa. L'app estrarrà automaticamente la ricetta.
+    </p>
+    <div class="ocr-area" id="qr-scan-area" onclick="document.getElementById('qr-scan-file').click()">
+      <div class="ocr-icon">📷</div>
+      <div class="ocr-label">Tocca per fotografare il QR Code</div>
+      <input type="file" id="qr-scan-file" accept="image/*" capture="environment" onchange="gestisciScanQR(this)" style="display:none">
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="btn-secondario" style="flex:1;margin:0" onclick="document.getElementById('qr-scan-camera').click()">📷 Fotocamera</button>
+      <button class="btn-secondario" style="flex:1;margin:0" onclick="document.getElementById('qr-scan-gallery').click()">🖼️ Galleria</button>
+    </div>
+    <input type="file" id="qr-scan-camera" accept="image/*" capture="environment" style="display:none" onchange="gestisciScanQR(this)">
+    <input type="file" id="qr-scan-gallery" accept="image/*" style="display:none" onchange="gestisciScanQR(this)">
+    <img id="qr-scan-preview" style="display:none;max-width:100%;border-radius:10px;margin-bottom:12px;max-height:200px;object-fit:cover;">
+    <div id="qr-scan-spinner" style="display:none;text-align:center;padding:12px;color:var(--testo2);font-size:13px;">
+      <div>🔍 Lettura QR Code in corso...</div>
+      <div class="progress-bar"><div class="progress-fill"></div></div>
+    </div>
+    <div id="qr-scan-risultato" style="display:none;" class="ocr-risultato"></div>
+    <button class="btn-primario" id="btn-usa-qr" onclick="usaRicettaDaQR()" style="display:none">✅ Aggiungi questa ricetta</button>
+    <button class="btn-secondario" id="btn-riprova-qr" onclick="riazzeraScanQR()" style="display:none">🔄 Riprova</button>
+    <button class="btn-secondario" onclick="chiudiScanQR()">Annulla</button>
+  </div>
+</div>
+
+</body>
+</html>
